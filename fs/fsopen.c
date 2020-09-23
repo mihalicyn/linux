@@ -209,6 +209,18 @@ err:
 	return ret;
 }
 
+static inline bool is_interrupt_error(int error)
+{
+	switch (error) {
+	case -EINTR:
+	case -ERESTARTSYS:
+	case -ERESTARTNOHAND:
+	case -ERESTARTNOINTR:
+		return true;
+	}
+	return false;
+}
+
 /*
  * Check the state and apply the configuration.  Note that this function is
  * allowed to 'steal' the value by setting param->xxx to NULL before returning.
@@ -217,11 +229,20 @@ static int vfs_fsconfig_locked(struct fs_context *fc, int cmd,
 			       struct fs_parameter *param)
 {
 	struct super_block *sb;
+	enum fs_context_phase entry_phase;
 	int ret;
 
 	ret = finish_clean_context(fc);
 	if (ret)
 		return ret;
+
+	/* We changing fc->phase in the code below but we need to
+	 * return fc->phase to the original value if we get
+	 * "interrupt error" during the process to make fsconfig
+	 * syscall restart procedure work correctly.
+	 */
+	entry_phase = fc->phase;
+
 	switch (cmd) {
 	case FSCONFIG_CMD_CREATE:
 		if (fc->phase != FS_CONTEXT_CREATE_PARAMS)
@@ -264,7 +285,16 @@ static int vfs_fsconfig_locked(struct fs_context *fc, int cmd,
 
 		return vfs_parse_fs_param(fc, param);
 	}
-	fc->phase = FS_CONTEXT_FAILED;
+
+	/* We should fail context only if we get real error.
+	 * If we get ERESTARTNOINTR we can safely restart
+	 * fsconfig syscall.
+	 */
+	if (is_interrupt_error(ret))
+		fc->phase = entry_phase;
+	else
+		fc->phase = FS_CONTEXT_FAILED;
+
 	return ret;
 }
 
