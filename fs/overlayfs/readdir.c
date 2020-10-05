@@ -14,6 +14,9 @@
 #include <linux/cred.h>
 #include <linux/ratelimit.h>
 #include <linux/exportfs.h>
+#include <linux/anon_inodes.h>
+#include <linux/seq_file.h>
+#include <linux/syscalls.h>
 #include "overlayfs.h"
 
 struct ovl_cache_entry {
@@ -1067,11 +1070,175 @@ static long ovl_ioctl_get_work_fhandle(struct super_block *sb,
 	return __ovl_ioctl_get_fhandle(ofs->workbasedir, arg);
 }
 
+static int ovlinfofd_release(struct inode *inode, struct file *file)
+{
+	printk("ovlinfofd_release\n");
+	return single_release(inode, file);
+}
+
+#ifdef CONFIG_PROC_FS
+static void ovlinfofd_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	/* TODO */
+}
+#endif
+
+static const struct file_operations ovlinfofd_fops = {
+	.owner		= THIS_MODULE,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo	= ovlinfofd_show_fdinfo,
+#endif
+	.release	= ovlinfofd_release,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+};
+
+static long __ovl_ioctl_show_dentry_fhandle(struct seq_file *s,
+					    const char *prefix,
+					    struct dentry *origin)
+{
+	struct ovl_mnt_opt_fh *fh;
+	int ret = 0, i;
+
+	fh = __ovl_encode_mnt_opt_fh(origin);
+	if (IS_ERR(fh))
+		return PTR_ERR(fh);
+
+	seq_printf(s, "%s fhandle-bytes:%x fhandle-type:%x f_handle:",
+		   prefix, fh->fh.handle_bytes, fh->fh.handle_type);
+
+	for (i = 0; i < fh->fh.handle_bytes; i++)
+		seq_printf(s, "%02x", (int)fh->fh.f_handle[i]);
+
+	seq_putc(s, '\n');
+
+	kfree(fh);
+	return ret;
+}
+
+static long ovl_ioctl_show_lower_fhandle(struct seq_file *s,
+					 unsigned long arg)
+{
+	struct super_block *sb = s->private;
+	struct ovl_entry *oe = sb->s_root->d_fsdata;
+	struct dentry *origin;
+
+	if (arg >= oe->numlower)
+		return -EINVAL;
+
+	origin = oe->lowerstack[arg].dentry;
+
+	return __ovl_ioctl_show_dentry_fhandle(s, "L", origin);
+}
+
+static long ovl_ioctl_show_upper_fhandle(struct seq_file *s)
+{
+	struct super_block *sb = s->private;
+	struct ovl_fs *ofs = sb->s_fs_info;
+	struct dentry *origin;
+
+	if (!ofs->config.upperdir)
+		return -EINVAL;
+
+	origin = OVL_I(d_inode(sb->s_root))->__upperdentry;
+
+	return __ovl_ioctl_show_dentry_fhandle(s, "U", origin);
+}
+
+static long ovl_ioctl_show_work_fhandle(struct seq_file *s)
+{
+	struct super_block *sb = s->private;
+	struct ovl_fs *ofs = sb->s_fs_info;
+
+	if (!ofs->config.upperdir)
+		return -EINVAL;
+
+	return __ovl_ioctl_show_dentry_fhandle(s, "W", ofs->workbasedir);
+}
+
+static int ovlinfofd_show(struct seq_file *s, void *unused)
+{
+	struct super_block *sb = s->private;
+	struct ovl_entry *oe = sb->s_root->d_fsdata;
+	int i;
+
+	printk("ovlinfofd_show\n");
+
+	seq_printf(s, "numlower: %d\n", oe->numlower);
+
+	for (i = 0; i < oe->numlower; i++)
+		ovl_ioctl_show_lower_fhandle(s, i);
+	ovl_ioctl_show_upper_fhandle(s);
+	ovl_ioctl_show_work_fhandle(s);
+
+	return 0;
+}
+
+static long ovl_ioctl_get_info_fd(struct super_block *sb,
+				  unsigned long arg)
+{
+	struct ovl_fs *ofs = sb->s_fs_info;
+	struct ovl_entry *oe = sb->s_root->d_fsdata;
+	int err, ufd, flags = arg;
+	struct fd f;
+
+	if (flags & ~(O_CLOEXEC))
+		return -EINVAL;
+
+	/* FIXME Comment taken from signalfd.c. Need to think about this.
+	 * When we call this, the initialization must be complete, since
+	 * anon_inode_getfd() will install the fd.
+	 */
+	ufd = anon_inode_getfd("[ovlinfofd]", &ovlinfofd_fops, NULL,
+				O_RDONLY | (flags & (O_CLOEXEC)));
+	if (ufd < 0)
+		return ufd;
+
+	f = fdget(ufd);
+	if (!f.file) {
+		err = -EBADF;
+		goto err_close;
+	}
+
+	/*
+	 * It's good to have some good guess of seq_file buffer size
+	 * from start because if we will just use single_open() function
+	 * then we will make several seq_file overflows and .show callback
+	 * will be called several times. It's very bad for performance.
+	 *
+	 * Guess is very simple: we show fhandles as hex string. So,
+	 * all that we need is take MAX_HANDLE_SZ * 2 and multiply by
+	 * number of overlayfs mount source-dirs.
+	 */
+	err = single_open_size(f.file, ovlinfofd_show, sb,
+			       MAX_HANDLE_SZ * 2 *
+			       (oe->numlower + 2 * !!ofs->config.upperdir));
+	if (err)
+		goto err_fdput;
+
+	/*
+	 * We doing tricky things by combining anon_inode_getfd with seq_files,
+	 * so, it's better to check that all fine with fops after single_open_size
+	 * call.
+	 */
+	WARN_ON(f.file->f_op != &ovlinfofd_fops);
+	fdput(f);
+
+	return ufd;
+
+err_fdput:
+	fdput(f);
+err_close:
+	ksys_close(ufd);
+	return err;
+}
+
 #define	OVL_IOC_GETLWRFHNDLSNUM			_IO('o', 1)
 // DISCUSS: what if MAX_HANDLE_SZ will change?
 #define	OVL_IOC_GETLWRFHNDL			_IOR('o', 2, struct ovl_mnt_opt_fh)
 #define	OVL_IOC_GETUPPRFHNDL			_IOR('o', 3, struct ovl_mnt_opt_fh)
 #define	OVL_IOC_GETWRKFHNDL			_IOR('o', 4, struct ovl_mnt_opt_fh)
+#define	OVL_IOC_GETINFOFD			_IO('o', 5)
 
 static long ovl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -1092,6 +1259,10 @@ static long ovl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case OVL_IOC_GETWRKFHNDL:
 		ret = ovl_ioctl_get_work_fhandle(file_inode(file)->i_sb, arg);
+		break;
+
+	case OVL_IOC_GETINFOFD:
+		ret = ovl_ioctl_get_info_fd(file_inode(file)->i_sb, arg);
 		break;
 
 	default:
