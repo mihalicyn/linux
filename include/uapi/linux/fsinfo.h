@@ -10,6 +10,8 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/openat2.h>
+#include <linux/fs.h>
+#include <linux/exportfs.h>
 
 /*
  * The filesystem attributes that can be requested.  Note that some attributes
@@ -43,6 +45,8 @@
 #define FSINFO_ATTR_AFS_CELL_NAME	0x300	/* AFS cell name (string) */
 #define FSINFO_ATTR_AFS_SERVER_NAME	0x301	/* Name of the Nth server (string) */
 #define FSINFO_ATTR_AFS_SERVER_ADDRESSES 0x302	/* List of addresses of the Nth server */
+
+#define FSINFO_ATTR_OVL_SOURCES		0x400	/* List of overlayfs source dirs fhandles+sdev */
 
 /*
  * Optional fsinfo() parameter structure.
@@ -340,5 +344,32 @@ struct fsinfo_error_state {
 };
 
 #define FSINFO_ATTR_ERROR_STATE__STRUCT struct fsinfo_error_state
+
+/*
+ * Information struct for fsinfo(FSINFO_ATTR_FSINFO_ATTRIBUTE_INFO).
+ *
+ * This gives information about the overlayfs upperdir, workdir, lowerdir
+ * superblock options (exported as fhandles).
+ */
+enum fsinfo_ovl_source_type {
+	FSINFO_OVL_UPPR	= 0,	/* upperdir */
+	FSINFO_OVL_WRK	= 1,	/* workdir */
+	FSINFO_OVL_LWR	= 2,	/* lowerdir list item */
+};
+
+/* DISCUSS: we can also export mnt_unique_id here which introduced by fsinfo patchset
+ * and then use him to detect if source was unmounted in the time gap between the moment when
+ * overlayfs was mounted and C/R process was started.
+ * We can get mnt_unique_id also by using fsinfo(FSINFO_ATTR_MOUNT_ALL)
+ */
+struct fsinfo_ovl_source {
+	enum fsinfo_ovl_source_type type;
+	__u32 s_dev;
+	struct file_handle fh;
+	/* use f_handle field from struct file_handle */
+	__u8 __fhdata[MAX_HANDLE_SZ];
+};
+
+#define FSINFO_ATTR_OVL_SOURCES__STRUCT struct fsinfo_ovl_source
 
 #endif /* _UAPI_LINUX_FSINFO_H */

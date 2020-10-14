@@ -392,6 +392,9 @@ static const struct super_operations ovl_super_operations = {
 	.put_super	= ovl_put_super,
 	.sync_fs	= ovl_sync_fs,
 	.statfs		= ovl_statfs,
+#ifdef CONFIG_FSINFO
+	.fsinfo		= ovl_fsinfo,
+#endif
 	.show_options	= ovl_show_options,
 	.remount_fs	= ovl_remount,
 };

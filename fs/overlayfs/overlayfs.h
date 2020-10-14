@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/uuid.h>
 #include <linux/fs.h>
+#include <linux/xattr.h>
 #include "ovl_entry.h"
 
 #undef pr_fmt
@@ -492,3 +493,8 @@ int ovl_set_origin(struct dentry *dentry, struct dentry *lower,
 
 /* export.c */
 extern const struct export_operations ovl_export_operations;
+
+/* fsinfo.c */
+#ifdef CONFIG_FSINFO
+extern int ovl_fsinfo(struct path *path, struct fsinfo_context *ctx);
+#endif
