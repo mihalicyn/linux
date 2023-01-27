@@ -549,6 +549,128 @@ struct fuse_sync_bucket {
 };
 
 /**
+ * A Fuse connection flags.
+ *
+ * This structure describes fuse connection capabilities, depending on the
+ * userspace daemon implementation.
+ * Most of this flags are calculated during the processing of reply to FUSE_INIT request,
+ * but some flags values are determined after connection initialization, for example,
+ * no_flush, no_setxattr, etc. These flags are safe to clear, because they always can be
+ * restored with a proper values in runtime.
+ */
+struct fuse_conn_flags {
+	/** Do readahead asynchronously?  Only set in INIT */
+	unsigned async_read:1;
+
+	/** Do not send separate SETATTR request before open(O_TRUNC)  */
+	unsigned atomic_o_trunc:1;
+
+	/** Filesystem supports NFS exporting.  Only set in INIT */
+	unsigned export_support:1;
+
+	/** write-back cache policy (default is write-through) */
+	unsigned writeback_cache:1;
+
+	/** allow parallel lookups and readdir (default is serialized) */
+	unsigned parallel_dirops:1;
+
+	/** handle fs handles killing suid/sgid/cap on write/chown/trunc */
+	unsigned handle_killpriv:1;
+
+	/** cache READLINK responses in page cache */
+	unsigned cache_symlinks:1;
+
+	/*
+	 * The following bitfields are only for optimization purposes
+	 * and hence races in setting them will not cause malfunction
+	 */
+
+	/** Is open/release not implemented by fs? */
+	unsigned no_open:1;
+
+	/** Is opendir/releasedir not implemented by fs? */
+	unsigned no_opendir:1;
+
+	/** Is fsync not implemented by fs? */
+	unsigned no_fsync:1;
+
+	/** Is fsyncdir not implemented by fs? */
+	unsigned no_fsyncdir:1;
+
+	/** Is flush not implemented by fs? */
+	unsigned no_flush:1;
+
+	/** Is setxattr not implemented by fs? */
+	unsigned no_setxattr:1;
+
+	/** Does file server support extended setxattr */
+	unsigned setxattr_ext:1;
+
+	/** Is getxattr not implemented by fs? */
+	unsigned no_getxattr:1;
+
+	/** Is listxattr not implemented by fs? */
+	unsigned no_listxattr:1;
+
+	/** Is removexattr not implemented by fs? */
+	unsigned no_removexattr:1;
+
+	/** Are posix file locking primitives not implemented by fs? */
+	unsigned no_lock:1;
+
+	/** Is access not implemented by fs? */
+	unsigned no_access:1;
+
+	/** Is create not implemented by fs? */
+	unsigned no_create:1;
+
+	/** Is interrupt not implemented by fs? */
+	unsigned no_interrupt:1;
+
+	/** Is bmap not implemented by fs? */
+	unsigned no_bmap:1;
+
+	/** Is poll not implemented by fs? */
+	unsigned no_poll:1;
+
+	/** Do multi-page cached writes */
+	unsigned big_writes:1;
+
+	/** Are BSD file locking primitives not implemented by fs? */
+	unsigned no_flock:1;
+
+	/** Is fallocate not implemented by fs? */
+	unsigned no_fallocate:1;
+
+	/** Is rename with flags implemented by fs? */
+	unsigned no_rename2:1;
+
+	/** Use enhanced/automatic page cache invalidation. */
+	unsigned auto_inval_data:1;
+
+	/** Filesystem is fully responsible for page cache invalidation. */
+	unsigned explicit_inval_data:1;
+
+	/** Does the filesystem support readdirplus? */
+	unsigned do_readdirplus:1;
+
+	/** Does the filesystem want adaptive readdirplus? */
+	unsigned readdirplus_auto:1;
+
+	/** Does the filesystem support asynchronous direct-IO submission? */
+	unsigned async_dio:1;
+
+	/** Is lseek not implemented by fs? */
+	unsigned no_lseek:1;
+
+	/** Does the filesystem support copy_file_range? */
+	unsigned no_copy_file_range:1;
+
+	/* Is statx not implemented by fs? */
+	unsigned int no_statx:1;
+};
+
+/**
  * A Fuse connection.
  *
  * This structure is created, when the root filesystem is mounted, and
@@ -646,29 +768,8 @@ struct fuse_conn {
 	/** Connection successful.  Only set in INIT */
 	unsigned conn_init:1;
 
-	/** Do readahead asynchronously?  Only set in INIT */
-	unsigned async_read:1;
-
 	/** Return an unique read error after abort.  Only set in INIT */
 	unsigned abort_err:1;
-
-	/** Do not send separate SETATTR request before open(O_TRUNC)  */
-	unsigned atomic_o_trunc:1;
-
-	/** Filesystem supports NFS exporting.  Only set in INIT */
-	unsigned export_support:1;
-
-	/** write-back cache policy (default is write-through) */
-	unsigned writeback_cache:1;
-
-	/** allow parallel lookups and readdir (default is serialized) */
-	unsigned parallel_dirops:1;
-
-	/** handle fs handles killing suid/sgid/cap on write/chown/trunc */
-	unsigned handle_killpriv:1;
-
-	/** cache READLINK responses in page cache */
-	unsigned cache_symlinks:1;
 
 	/* show legacy mount options */
 	unsigned int legacy_opts_show:1;
@@ -681,91 +782,8 @@ struct fuse_conn {
 	 */
 	unsigned handle_killpriv_v2:1;
 
-	/*
-	 * The following bitfields are only for optimization purposes
-	 * and hence races in setting them will not cause malfunction
-	 */
-
-	/** Is open/release not implemented by fs? */
-	unsigned no_open:1;
-
-	/** Is opendir/releasedir not implemented by fs? */
-	unsigned no_opendir:1;
-
-	/** Is fsync not implemented by fs? */
-	unsigned no_fsync:1;
-
-	/** Is fsyncdir not implemented by fs? */
-	unsigned no_fsyncdir:1;
-
-	/** Is flush not implemented by fs? */
-	unsigned no_flush:1;
-
-	/** Is setxattr not implemented by fs? */
-	unsigned no_setxattr:1;
-
-	/** Does file server support extended setxattr */
-	unsigned setxattr_ext:1;
-
-	/** Is getxattr not implemented by fs? */
-	unsigned no_getxattr:1;
-
-	/** Is listxattr not implemented by fs? */
-	unsigned no_listxattr:1;
-
-	/** Is removexattr not implemented by fs? */
-	unsigned no_removexattr:1;
-
-	/** Are posix file locking primitives not implemented by fs? */
-	unsigned no_lock:1;
-
-	/** Is access not implemented by fs? */
-	unsigned no_access:1;
-
-	/** Is create not implemented by fs? */
-	unsigned no_create:1;
-
-	/** Is interrupt not implemented by fs? */
-	unsigned no_interrupt:1;
-
-	/** Is bmap not implemented by fs? */
-	unsigned no_bmap:1;
-
-	/** Is poll not implemented by fs? */
-	unsigned no_poll:1;
-
-	/** Do multi-page cached writes */
-	unsigned big_writes:1;
-
 	/** Don't apply umask to creation modes */
 	unsigned dont_mask:1;
-
-	/** Are BSD file locking primitives not implemented by fs? */
-	unsigned no_flock:1;
-
-	/** Is fallocate not implemented by fs? */
-	unsigned no_fallocate:1;
-
-	/** Is rename with flags implemented by fs? */
-	unsigned no_rename2:1;
-
-	/** Use enhanced/automatic page cache invalidation. */
-	unsigned auto_inval_data:1;
-
-	/** Filesystem is fully responsible for page cache invalidation. */
-	unsigned explicit_inval_data:1;
-
-	/** Does the filesystem support readdirplus? */
-	unsigned do_readdirplus:1;
-
-	/** Does the filesystem want adaptive readdirplus? */
-	unsigned readdirplus_auto:1;
-
-	/** Does the filesystem support asynchronous direct-IO submission? */
-	unsigned async_dio:1;
-
-	/** Is lseek not implemented by fs? */
-	unsigned no_lseek:1;
 
 	/** Does the filesystem support posix acls? */
 	unsigned posix_acl:1;
@@ -775,9 +793,6 @@ struct fuse_conn {
 
 	/** Allow other than the mounter user to access the filesystem ? */
 	unsigned allow_other:1;
-
-	/** Does the filesystem support copy_file_range? */
-	unsigned no_copy_file_range:1;
 
 	/* Send DESTROY request */
 	unsigned int destroy:1;
@@ -812,8 +827,7 @@ struct fuse_conn {
 	/* relax restrictions in FOPEN_DIRECT_IO mode */
 	unsigned int direct_io_relax:1;
 
-	/* Is statx not implemented by fs? */
-	unsigned int no_statx:1;
+	struct fuse_conn_flags flags;
 
 	/** The number of requests waiting for completion */
 	atomic_t num_waiting;

@@ -242,7 +242,7 @@ u32 fuse_get_cache_mask(struct inode *inode)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
-	if (!fc->writeback_cache || !S_ISREG(inode->i_mode))
+	if (!fc->flags.writeback_cache || !S_ISREG(inode->i_mode))
 		return 0;
 
 	return STATX_MTIME | STATX_CTIME | STATX_SIZE;
@@ -301,9 +301,9 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 
 		if (oldsize != attr->size) {
 			truncate_pagecache(inode, attr->size);
-			if (!fc->explicit_inval_data)
+			if (!fc->flags.explicit_inval_data)
 				inval = true;
-		} else if (fc->auto_inval_data) {
+		} else if (fc->flags.auto_inval_data) {
 			struct timespec64 new_mtime = {
 				.tv_sec = attr->mtime,
 				.tv_nsec = attr->mtimensec,
@@ -404,7 +404,7 @@ retry:
 
 	if ((inode->i_state & I_NEW)) {
 		inode->i_flags |= S_NOATIME;
-		if (!fc->writeback_cache || !S_ISREG(attr->mode))
+		if (!fc->flags.writeback_cache || !S_ISREG(attr->mode))
 			inode->i_flags |= S_NOCMTIME;
 		inode->i_generation = generation;
 		fuse_init_inode(inode, attr, fc);
@@ -483,7 +483,7 @@ bool fuse_lock_inode(struct inode *inode)
 {
 	bool locked = false;
 
-	if (!get_fuse_conn(inode)->parallel_dirops) {
+	if (!get_fuse_conn(inode)->flags.parallel_dirops) {
 		mutex_lock(&get_fuse_inode(inode)->mutex);
 		locked = true;
 	}
@@ -935,7 +935,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 		struct fuse_entry_out outarg;
 		const struct qstr name = QSTR_INIT(".", 1);
 
-		if (!fc->export_support)
+		if (!fc->flags.export_support)
 			goto out_err;
 
 		err = fuse_lookup_name(sb, handle->nodeid, &name, &outarg,
@@ -1036,7 +1036,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 	struct fuse_entry_out outarg;
 	int err;
 
-	if (!fc->export_support)
+	if (!fc->flags.export_support)
 		return ERR_PTR(-ESTALE);
 
 	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
@@ -1155,44 +1155,44 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 
 			ra_pages = arg->max_readahead / PAGE_SIZE;
 			if (flags & FUSE_ASYNC_READ)
-				fc->async_read = 1;
+				fc->flags.async_read = 1;
 			if (!(flags & FUSE_POSIX_LOCKS))
-				fc->no_lock = 1;
+				fc->flags.no_lock = 1;
 			if (arg->minor >= 17) {
 				if (!(flags & FUSE_FLOCK_LOCKS))
-					fc->no_flock = 1;
+					fc->flags.no_flock = 1;
 			} else {
 				if (!(flags & FUSE_POSIX_LOCKS))
-					fc->no_flock = 1;
+					fc->flags.no_flock = 1;
 			}
 			if (flags & FUSE_ATOMIC_O_TRUNC)
-				fc->atomic_o_trunc = 1;
+				fc->flags.atomic_o_trunc = 1;
 			if (arg->minor >= 9) {
 				/* LOOKUP has dependency on proto version */
 				if (flags & FUSE_EXPORT_SUPPORT)
-					fc->export_support = 1;
+					fc->flags.export_support = 1;
 			}
 			if (flags & FUSE_BIG_WRITES)
-				fc->big_writes = 1;
+				fc->flags.big_writes = 1;
 			if (flags & FUSE_DONT_MASK)
 				fc->dont_mask = 1;
 			if (flags & FUSE_AUTO_INVAL_DATA)
-				fc->auto_inval_data = 1;
+				fc->flags.auto_inval_data = 1;
 			else if (flags & FUSE_EXPLICIT_INVAL_DATA)
-				fc->explicit_inval_data = 1;
+				fc->flags.explicit_inval_data = 1;
 			if (flags & FUSE_DO_READDIRPLUS) {
-				fc->do_readdirplus = 1;
+				fc->flags.do_readdirplus = 1;
 				if (flags & FUSE_READDIRPLUS_AUTO)
-					fc->readdirplus_auto = 1;
+					fc->flags.readdirplus_auto = 1;
 			}
 			if (flags & FUSE_ASYNC_DIO)
-				fc->async_dio = 1;
+				fc->flags.async_dio = 1;
 			if (flags & FUSE_WRITEBACK_CACHE)
-				fc->writeback_cache = 1;
+				fc->flags.writeback_cache = 1;
 			if (flags & FUSE_PARALLEL_DIROPS)
-				fc->parallel_dirops = 1;
+				fc->flags.parallel_dirops = 1;
 			if (flags & FUSE_HANDLE_KILLPRIV)
-				fc->handle_killpriv = 1;
+				fc->flags.handle_killpriv = 1;
 			if (arg->time_gran && arg->time_gran <= 1000000000)
 				fm->sb->s_time_gran = arg->time_gran;
 			if ((flags & FUSE_POSIX_ACL)) {
@@ -1200,7 +1200,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				fc->posix_acl = 1;
 			}
 			if (flags & FUSE_CACHE_SYMLINKS)
-				fc->cache_symlinks = 1;
+				fc->flags.cache_symlinks = 1;
 			if (flags & FUSE_ABORT_ERROR)
 				fc->abort_err = 1;
 			if (flags & FUSE_MAX_PAGES) {
@@ -1221,7 +1221,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				fm->sb->s_flags |= SB_NOSEC;
 			}
 			if (flags & FUSE_SETXATTR_EXT)
-				fc->setxattr_ext = 1;
+				fc->flags.setxattr_ext = 1;
 			if (flags & FUSE_SECURITY_CTX)
 				fc->init_security = 1;
 			if (flags & FUSE_CREATE_SUPP_GROUP)
@@ -1230,8 +1230,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				fc->direct_io_relax = 1;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
-			fc->no_lock = 1;
-			fc->no_flock = 1;
+			fc->flags.no_lock = 1;
+			fc->flags.no_flock = 1;
 		}
 
 		fm->sb->s_bdi->ra_pages =
