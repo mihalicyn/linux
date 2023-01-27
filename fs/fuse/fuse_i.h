@@ -881,32 +881,32 @@ struct fuse_mount {
 	struct list_head fc_entry;
 };
 
-static inline struct fuse_mount *get_fuse_mount_super(struct super_block *sb)
+static inline struct fuse_mount *get_fuse_mount_super(const struct super_block *sb)
 {
 	return sb->s_fs_info;
 }
 
-static inline struct fuse_conn *get_fuse_conn_super(struct super_block *sb)
+static inline struct fuse_conn *get_fuse_conn_super(const struct super_block *sb)
 {
 	return get_fuse_mount_super(sb)->fc;
 }
 
-static inline struct fuse_mount *get_fuse_mount(struct inode *inode)
+static inline struct fuse_mount *get_fuse_mount(const struct inode *inode)
 {
 	return get_fuse_mount_super(inode->i_sb);
 }
 
-static inline struct fuse_conn *get_fuse_conn(struct inode *inode)
+static inline struct fuse_conn *get_fuse_conn(const struct inode *inode)
 {
 	return get_fuse_mount_super(inode->i_sb)->fc;
 }
 
-static inline struct fuse_inode *get_fuse_inode(struct inode *inode)
+static inline struct fuse_inode *get_fuse_inode(const struct inode *inode)
 {
 	return container_of(inode, struct fuse_inode, inode);
 }
 
-static inline u64 get_node_id(struct inode *inode)
+static inline u64 get_node_id(const struct inode *inode)
 {
 	return get_fuse_inode(inode)->nodeid;
 }
@@ -916,7 +916,7 @@ static inline int invalid_nodeid(u64 nodeid)
 	return !nodeid || nodeid == FUSE_ROOT_ID;
 }
 
-static inline u64 fuse_get_attr_version(struct fuse_conn *fc)
+static inline u64 fuse_get_attr_version(const struct fuse_conn *fc)
 {
 	return atomic64_read(&fc->attr_version);
 }
@@ -934,7 +934,7 @@ static inline void fuse_make_bad(struct inode *inode)
 	set_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state);
 }
 
-static inline bool fuse_is_bad(struct inode *inode)
+static inline bool fuse_is_bad(const struct inode *inode)
 {
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
 }
