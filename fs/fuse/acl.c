@@ -26,7 +26,7 @@ static struct posix_acl *__fuse_get_acl(struct fuse_conn *fc,
 	if (fuse_is_bad(inode))
 		return ERR_PTR(-EIO);
 
-	if (fc->no_getxattr)
+	if (fc->flags.no_getxattr)
 		return NULL;
 
 	if (type == ACL_TYPE_ACCESS)
@@ -43,7 +43,7 @@ static struct posix_acl *__fuse_get_acl(struct fuse_conn *fc,
 	if (size > 0)
 		acl = posix_acl_from_xattr(fc->user_ns, value, size);
 	else if ((size == 0) || (size == -ENODATA) ||
-		 (size == -EOPNOTSUPP && fc->no_getxattr))
+		 (size == -EOPNOTSUPP && fc->flags.no_getxattr))
 		acl = NULL;
 	else if (size == -ERANGE)
 		acl = ERR_PTR(-E2BIG);
@@ -105,7 +105,7 @@ int fuse_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (fuse_is_bad(inode))
 		return -EIO;
 
-	if (fc->no_setxattr || fuse_no_acl(fc, inode))
+	if (fc->flags.no_setxattr || fuse_no_acl(fc, inode))
 		return -EOPNOTSUPP;
 
 	if (type == ACL_TYPE_ACCESS)

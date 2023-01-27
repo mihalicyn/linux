@@ -705,7 +705,7 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	} else {
 		file->private_data = ff;
 		fuse_finish_open(inode, file);
-		if (fm->fc->atomic_o_trunc && trunc)
+		if (fm->fc->flags.atomic_o_trunc && trunc)
 			truncate_pagecache(inode, 0);
 		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
 			invalidate_inode_pages2(inode->i_mapping);
@@ -748,12 +748,12 @@ static int fuse_atomic_open(struct inode *dir, struct dentry *entry,
 	/* Only creates */
 	file->f_mode |= FMODE_CREATED;
 
-	if (fc->no_create)
+	if (fc->flags.no_create)
 		goto mknod;
 
 	err = fuse_create_open(dir, entry, file, flags, mode, FUSE_CREATE);
 	if (err == -ENOSYS) {
-		fc->no_create = 1;
+		fc->flags.no_create = 1;
 		goto mknod;
 	}
 out_dput:
@@ -1078,14 +1078,14 @@ static int fuse_rename2(struct mnt_idmap *idmap, struct inode *olddir,
 		return -EINVAL;
 
 	if (flags) {
-		if (fc->no_rename2 || fc->minor < 23)
+		if (fc->flags.no_rename2 || fc->minor < 23)
 			return -EINVAL;
 
 		err = fuse_rename_common(olddir, oldent, newdir, newent, flags,
 					 FUSE_RENAME2,
 					 sizeof(struct fuse_rename2_in));
 		if (err == -ENOSYS) {
-			fc->no_rename2 = 1;
+			fc->flags.no_rename2 = 1;
 			err = -EINVAL;
 		}
 	} else {
@@ -1352,7 +1352,7 @@ static int fuse_access(struct inode *inode, int mask)
 
 	BUG_ON(mask & MAY_NOT_BLOCK);
 
-	if (fm->fc->no_access)
+	if (fm->fc->flags.no_access)
 		return 0;
 
 	memset(&inarg, 0, sizeof(inarg));
@@ -1364,7 +1364,7 @@ static int fuse_access(struct inode *inode, int mask)
 	args.in_args[0].value = &inarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_access = 1;
+		fm->fc->flags.no_access = 1;
 		err = 0;
 	}
 	return err;
@@ -1501,7 +1501,7 @@ static const char *fuse_get_link(struct dentry *dentry, struct inode *inode,
 	if (fuse_is_bad(inode))
 		goto out_err;
 
-	if (fc->cache_symlinks)
+	if (fc->flags.cache_symlinks)
 		return page_get_link(dentry, inode, callback);
 
 	err = -ECHILD;
@@ -1549,13 +1549,13 @@ static int fuse_dir_fsync(struct file *file, loff_t start, loff_t end,
 	if (fuse_is_bad(inode))
 		return -EIO;
 
-	if (fc->no_fsyncdir)
+	if (fc->flags.no_fsyncdir)
 		return 0;
 
 	inode_lock(inode);
 	err = fuse_fsync_common(file, start, end, datasync, FUSE_FSYNCDIR);
 	if (err == -ENOSYS) {
-		fc->no_fsyncdir = 1;
+		fc->flags.no_fsyncdir = 1;
 		err = 0;
 	}
 	inode_unlock(inode);
@@ -1747,7 +1747,7 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 	struct fuse_setattr_in inarg;
 	struct fuse_attr_out outarg;
 	bool is_truncate = false;
-	bool is_wb = fc->writeback_cache && S_ISREG(inode->i_mode);
+	bool is_wb = fc->flags.writeback_cache && S_ISREG(inode->i_mode);
 	loff_t oldsize;
 	int err;
 	bool trust_local_cmtime = is_wb;
@@ -1780,7 +1780,7 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 		/* This is coming from open(..., ... | O_TRUNC); */
 		WARN_ON(!(attr->ia_valid & ATTR_SIZE));
 		WARN_ON(attr->ia_size != 0);
-		if (fc->atomic_o_trunc) {
+		if (fc->flags.atomic_o_trunc) {
 			/*
 			 * No need to send request to userspace, since actual
 			 * truncation has already been done by OPEN.  But still
@@ -1927,7 +1927,7 @@ static int fuse_setattr(struct mnt_idmap *idmap, struct dentry *entry,
 		 *
 		 * This should be done on write(), truncate() and chown().
 		 */
-		if (!fc->handle_killpriv && !fc->handle_killpriv_v2) {
+		if (!fc->flags.handle_killpriv && !fc->handle_killpriv_v2) {
 			/*
 			 * ia_mode calculation may have used stale i_mode.
 			 * Refresh and recalculate.
