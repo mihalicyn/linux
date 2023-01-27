@@ -29,7 +29,7 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
-	if (!fm->fc->atomic_o_trunc)
+	if (!fm->fc->flags.atomic_o_trunc)
 		inarg.flags &= ~O_TRUNC;
 
 	if (fm->fc->handle_killpriv_v2 &&
@@ -110,7 +110,7 @@ static void fuse_file_put(struct fuse_file *ff, bool sync, bool isdir)
 	if (refcount_dec_and_test(&ff->count)) {
 		struct fuse_args *args = &ff->release_args->args;
 
-		if (isdir ? ff->fm->fc->no_opendir : ff->fm->fc->no_open) {
+		if (isdir ? ff->fm->fc->flags.no_opendir : ff->fm->fc->flags.no_open) {
 			/* Do nothing when client does not implement 'open' */
 			fuse_release_end(ff->fm, args, 0);
 		} else if (sync) {
@@ -140,7 +140,7 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 	ff->fh = 0;
 	/* Default for no-open */
 	ff->open_flags = FOPEN_KEEP_CACHE | (isdir ? FOPEN_CACHE_DIR : 0);
-	if (isdir ? !fc->no_opendir : !fc->no_open) {
+	if (isdir ? !fc->flags.no_opendir : !fc->flags.no_open) {
 		struct fuse_open_out outarg;
 		int err;
 
@@ -154,9 +154,9 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 			return ERR_PTR(err);
 		} else {
 			if (isdir)
-				fc->no_opendir = 1;
+				fc->flags.no_opendir = 1;
 			else
-				fc->no_open = 1;
+				fc->flags.no_open = 1;
 		}
 	}
 
@@ -205,7 +205,7 @@ void fuse_finish_open(struct inode *inode, struct file *file)
 	else if (ff->open_flags & FOPEN_NONSEEKABLE)
 		nonseekable_open(inode, file);
 
-	if (fc->atomic_o_trunc && (file->f_flags & O_TRUNC)) {
+	if (fc->flags.atomic_o_trunc && (file->f_flags & O_TRUNC)) {
 		struct fuse_inode *fi = get_fuse_inode(inode);
 
 		spin_lock(&fi->lock);
@@ -215,7 +215,7 @@ void fuse_finish_open(struct inode *inode, struct file *file)
 		file_update_time(file);
 		fuse_invalidate_attr_mask(inode, FUSE_STATX_MODSIZE);
 	}
-	if ((file->f_mode & FMODE_WRITE) && fc->writeback_cache)
+	if ((file->f_mode & FMODE_WRITE) && fc->flags.writeback_cache)
 		fuse_link_write_file(file);
 }
 
@@ -225,10 +225,10 @@ int fuse_open_common(struct inode *inode, struct file *file, bool isdir)
 	struct fuse_conn *fc = fm->fc;
 	int err;
 	bool is_wb_truncate = (file->f_flags & O_TRUNC) &&
-			  fc->atomic_o_trunc &&
-			  fc->writeback_cache;
+			  fc->flags.atomic_o_trunc &&
+			  fc->flags.writeback_cache;
 	bool dax_truncate = (file->f_flags & O_TRUNC) &&
-			  fc->atomic_o_trunc && FUSE_IS_DAX(inode);
+			  fc->flags.atomic_o_trunc && FUSE_IS_DAX(inode);
 
 	if (fuse_is_bad(inode))
 		return -EIO;
@@ -259,7 +259,7 @@ int fuse_open_common(struct inode *inode, struct file *file, bool isdir)
 	if (!err) {
 		struct fuse_file *ff = file->private_data;
 
-		if (fc->atomic_o_trunc && (file->f_flags & O_TRUNC))
+		if (fc->flags.atomic_o_trunc && (file->f_flags & O_TRUNC))
 			truncate_pagecache(inode, 0);
 		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
 			invalidate_inode_pages2(inode->i_mapping);
@@ -350,7 +350,7 @@ static int fuse_release(struct inode *inode, struct file *file)
 	 * Dirty pages might remain despite write_inode_now() call from
 	 * fuse_flush() due to writes racing with the close.
 	 */
-	if (fc->writeback_cache)
+	if (fc->flags.writeback_cache)
 		write_inode_now(inode, 1);
 
 	fuse_release_common(file, false);
@@ -491,7 +491,7 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	if (fuse_is_bad(inode))
 		return -EIO;
 
-	if (ff->open_flags & FOPEN_NOFLUSH && !fm->fc->writeback_cache)
+	if (ff->open_flags & FOPEN_NOFLUSH && !fm->fc->flags.writeback_cache)
 		return 0;
 
 	err = write_inode_now(inode, 1);
@@ -507,7 +507,7 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 		return err;
 
 	err = 0;
-	if (fm->fc->no_flush)
+	if (fm->fc->flags.no_flush)
 		goto inval_attr_out;
 
 	memset(&inarg, 0, sizeof(inarg));
@@ -522,7 +522,7 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_flush = 1;
+		fm->fc->flags.no_flush = 1;
 		err = 0;
 	}
 
@@ -531,7 +531,7 @@ inval_attr_out:
 	 * In memory i_blocks is not maintained by fuse, if writeback cache is
 	 * enabled, i_blocks from cached attr may not be accurate.
 	 */
-	if (!err && fm->fc->writeback_cache)
+	if (!err && fm->fc->flags.writeback_cache)
 		fuse_invalidate_attr_mask(inode, STATX_BLOCKS);
 	return err;
 }
@@ -592,12 +592,12 @@ static int fuse_fsync(struct file *file, loff_t start, loff_t end,
 	if (err)
 		goto out;
 
-	if (fc->no_fsync)
+	if (fc->flags.no_fsync)
 		goto out;
 
 	err = fuse_fsync_common(file, start, end, datasync, FUSE_FSYNC);
 	if (err == -ENOSYS) {
-		fc->no_fsync = 1;
+		fc->flags.no_fsync = 1;
 		err = 0;
 	}
 out:
@@ -822,7 +822,7 @@ static void fuse_short_read(struct inode *inode, u64 attr_ver, size_t num_read,
 	 * the file.  Some data after the hole is in page cache, but has not
 	 * reached the client fs yet.  So the hole is not present there.
 	 */
-	if (!fc->writeback_cache) {
+	if (!fc->flags.writeback_cache) {
 		loff_t pos = page_offset(ap->pages[0]) + num_read;
 		fuse_read_update_size(inode, pos, attr_ver);
 	}
@@ -953,7 +953,7 @@ static void fuse_send_readpages(struct fuse_io_args *ia, struct file *file)
 
 	fuse_read_args_fill(ia, file, pos, count, FUSE_READ);
 	ia->read.attr_ver = fuse_get_attr_version(fm->fc);
-	if (fm->fc->async_read) {
+	if (fm->fc->flags.async_read) {
 		ia->ff = fuse_file_get(ff);
 		ap->args.end = fuse_readpages_end;
 		err = fuse_simple_background(fm, &ap->args, GFP_KERNEL);
@@ -1020,7 +1020,7 @@ static ssize_t fuse_cache_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	 * Otherwise, only update if we attempt to read past EOF (to ensure
 	 * i_size is up to date).
 	 */
-	if (fc->auto_inval_data ||
+	if (fc->flags.auto_inval_data ||
 	    (iocb->ki_pos + iov_iter_count(to) > i_size_read(inode))) {
 		int err;
 		err = fuse_update_attributes(inode, iocb->ki_filp, STATX_SIZE);
@@ -1227,7 +1227,7 @@ static ssize_t fuse_fill_write_pages(struct fuse_io_args *ia,
 			ia->write.page_locked = true;
 			break;
 		}
-		if (!fc->big_writes)
+		if (!fc->flags.big_writes)
 			break;
 	} while (iov_iter_count(ii) && count < fc->max_write &&
 		 ap->num_pages < max_pages && offset == 0);
@@ -1308,7 +1308,7 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t err;
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
-	if (fc->writeback_cache) {
+	if (fc->flags.writeback_cache) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
 		err = fuse_update_attributes(mapping->host, file,
 					     STATX_SIZE | STATX_MODE);
@@ -1821,7 +1821,7 @@ static void fuse_writepage_end(struct fuse_mount *fm, struct fuse_args *args,
 	 * Do this only if writeback_cache is not enabled.  If writeback_cache
 	 * is enabled, we trust local ctime/mtime.
 	 */
-	if (!fc->writeback_cache)
+	if (!fc->flags.writeback_cache)
 		fuse_invalidate_attr_mask(inode, FUSE_STATX_MODIFY);
 	spin_lock(&fi->lock);
 	rb_erase(&wpa->writepages_entry, &fi->writepages);
@@ -2325,7 +2325,7 @@ static int fuse_write_begin(struct file *file, struct address_space *mapping,
 	loff_t fsize;
 	int err = -ENOMEM;
 
-	WARN_ON(!fc->writeback_cache);
+	WARN_ON(!fc->flags.writeback_cache);
 
 	page = grab_cache_page_write_begin(mapping, index);
 	if (!page)
@@ -2601,13 +2601,13 @@ static int fuse_file_lock(struct file *file, int cmd, struct file_lock *fl)
 	if (cmd == F_CANCELLK) {
 		err = 0;
 	} else if (cmd == F_GETLK) {
-		if (fc->no_lock) {
+		if (fc->flags.no_lock) {
 			posix_test_lock(file, fl);
 			err = 0;
 		} else
 			err = fuse_getlk(file, fl);
 	} else {
-		if (fc->no_lock)
+		if (fc->flags.no_lock)
 			err = posix_lock_file(file, fl, NULL);
 		else
 			err = fuse_setlk(file, fl, 0);
@@ -2621,7 +2621,7 @@ static int fuse_file_flock(struct file *file, int cmd, struct file_lock *fl)
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	int err;
 
-	if (fc->no_flock) {
+	if (fc->flags.no_flock) {
 		err = locks_lock_file_wait(file, fl);
 	} else {
 		struct fuse_file *ff = file->private_data;
@@ -2643,7 +2643,7 @@ static sector_t fuse_bmap(struct address_space *mapping, sector_t block)
 	struct fuse_bmap_out outarg;
 	int err;
 
-	if (!inode->i_sb->s_bdev || fm->fc->no_bmap)
+	if (!inode->i_sb->s_bdev || fm->fc->flags.no_bmap)
 		return 0;
 
 	memset(&inarg, 0, sizeof(inarg));
@@ -2659,7 +2659,7 @@ static sector_t fuse_bmap(struct address_space *mapping, sector_t block)
 	args.out_args[0].value = &outarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS)
-		fm->fc->no_bmap = 1;
+		fm->fc->flags.no_bmap = 1;
 
 	return err ? 0 : outarg.block;
 }
@@ -2678,7 +2678,7 @@ static loff_t fuse_lseek(struct file *file, loff_t offset, int whence)
 	struct fuse_lseek_out outarg;
 	int err;
 
-	if (fm->fc->no_lseek)
+	if (fm->fc->flags.no_lseek)
 		goto fallback;
 
 	args.opcode = FUSE_LSEEK;
@@ -2692,7 +2692,7 @@ static loff_t fuse_lseek(struct file *file, loff_t offset, int whence)
 	err = fuse_simple_request(fm, &args);
 	if (err) {
 		if (err == -ENOSYS) {
-			fm->fc->no_lseek = 1;
+			fm->fc->flags.no_lseek = 1;
 			goto fallback;
 		}
 		return err;
@@ -2799,7 +2799,7 @@ __poll_t fuse_file_poll(struct file *file, poll_table *wait)
 	FUSE_ARGS(args);
 	int err;
 
-	if (fm->fc->no_poll)
+	if (fm->fc->flags.no_poll)
 		return DEFAULT_POLLMASK;
 
 	poll_wait(file, &ff->poll_wait, wait);
@@ -2827,7 +2827,7 @@ __poll_t fuse_file_poll(struct file *file, poll_table *wait)
 	if (!err)
 		return demangle_poll(outarg.revents);
 	if (err == -ENOSYS) {
-		fm->fc->no_poll = 1;
+		fm->fc->flags.no_poll = 1;
 		return DEFAULT_POLLMASK;
 	}
 	return EPOLLERR;
@@ -2913,7 +2913,7 @@ fuse_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	 * By default, we want to optimize all I/Os with async request
 	 * submission to the client filesystem if supported.
 	 */
-	io->async = ff->fm->fc->async_dio;
+	io->async = ff->fm->fc->flags.async_dio;
 	io->iocb = iocb;
 	io->blocking = is_sync_kiocb(iocb);
 
@@ -3006,7 +3006,7 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 		     FALLOC_FL_ZERO_RANGE))
 		return -EOPNOTSUPP;
 
-	if (fm->fc->no_fallocate)
+	if (fm->fc->flags.no_fallocate)
 		return -EOPNOTSUPP;
 
 	inode_lock(inode);
@@ -3046,7 +3046,7 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 	args.in_args[0].value = &inarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_fallocate = 1;
+		fm->fc->flags.no_fallocate = 1;
 		err = -EOPNOTSUPP;
 	}
 	if (err)
@@ -3102,10 +3102,10 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	ssize_t err;
 	/* mark unstable when write-back is not used, and file_out gets
 	 * extended */
-	bool is_unstable = (!fc->writeback_cache) &&
+	bool is_unstable = (!fc->flags.writeback_cache) &&
 			   ((pos_out + len) > inode_out->i_size);
 
-	if (fc->no_copy_file_range)
+	if (fc->flags.no_copy_file_range)
 		return -EOPNOTSUPP;
 
 	if (file_inode(file_in)->i_sb != file_inode(file_out)->i_sb)
@@ -3158,7 +3158,7 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	args.out_args[0].value = &outarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fc->no_copy_file_range = 1;
+		fc->flags.no_copy_file_range = 1;
 		err = -EOPNOTSUPP;
 	}
 	if (err)

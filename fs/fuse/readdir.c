@@ -18,9 +18,9 @@ static bool fuse_use_readdirplus(struct inode *dir, struct dir_context *ctx)
 	struct fuse_conn *fc = get_fuse_conn(dir);
 	struct fuse_inode *fi = get_fuse_inode(dir);
 
-	if (!fc->do_readdirplus)
+	if (!fc->flags.do_readdirplus)
 		return false;
-	if (!fc->readdirplus_auto)
+	if (!fc->flags.readdirplus_auto)
 		return true;
 	if (test_and_clear_bit(FUSE_I_ADVISE_RDPLUS, &fi->state))
 		return true;
@@ -254,7 +254,7 @@ retry:
 			return PTR_ERR(dentry);
 		}
 	}
-	if (fc->readdirplus_auto)
+	if (fc->flags.readdirplus_auto)
 		set_bit(FUSE_I_INIT_RDPLUS, &get_fuse_inode(inode)->state);
 	fuse_change_entry_timeout(dentry, o);
 
@@ -463,7 +463,7 @@ static int fuse_readdir_cached(struct file *file, struct dir_context *ctx)
 	 * We're just about to start reading into the cache or reading the
 	 * cache; both cases require an up-to-date mtime value.
 	 */
-	if (!ctx->pos && fc->auto_inval_data) {
+	if (!ctx->pos && fc->flags.auto_inval_data) {
 		int err = fuse_update_attributes(inode, file, STATX_MTIME);
 
 		if (err)
