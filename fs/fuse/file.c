@@ -78,6 +78,7 @@ struct fuse_file *fuse_file_alloc(struct fuse_mount *fm)
 	init_waitqueue_head(&ff->poll_wait);
 
 	ff->kh = atomic64_inc_return(&fm->fc->khctr);
+	ff->conn_gen = READ_ONCE(fm->fc->conn_gen);
 
 	return ff;
 }

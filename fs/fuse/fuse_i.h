@@ -164,6 +164,9 @@ struct fuse_inode {
 	 */
 	struct fuse_inode_dax *dax;
 #endif
+
+	/** Fuse connection (fuse_conn) generation when inode was allocated */
+	u32 conn_gen;
 };
 
 /** FUSE inode state bits */
@@ -237,6 +240,9 @@ struct fuse_file {
 
 	/** Has flock been performed on this file? */
 	bool flock:1;
+
+	/** Fuse connection (fuse_conn) generation when file was allocated */
+	u32 conn_gen;
 };
 
 /** One input argument of a request */
@@ -858,6 +864,18 @@ struct fuse_conn {
 
 	/* New writepages go into this bucket */
 	struct fuse_sync_bucket __rcu *curr_bucket;
+
+	/**
+	 * Connection generation.
+	 * Used to determine if inodes/files were created with an "old"
+	 * fuse connection and have to be invalidated. So, all requests
+	 * related to these inodes should fail with -EIO.
+	 *
+	 * CHECKME: do we really need conn_gen for struct fuse_file?
+	 * Right now it's only needed for fuse_file_put(), where we have
+	 * no access to the inode in some cases.
+	 */
+	u32 conn_gen;
 };
 
 /*
@@ -919,6 +937,17 @@ static inline int invalid_nodeid(u64 nodeid)
 static inline u64 fuse_get_attr_version(const struct fuse_conn *fc)
 {
 	return atomic64_read(&fc->attr_version);
+}
+
+static inline bool fuse_stale_ff(const struct fuse_file *ff)
+{
+	return unlikely(READ_ONCE(ff->fm->fc->conn_gen) != ff->conn_gen);
+}
+
+static inline bool fuse_stale_inode_conn(const struct inode *inode)
+{
+	return unlikely(READ_ONCE(get_fuse_conn(inode)->conn_gen) !=
+			get_fuse_inode(inode)->conn_gen);
 }
 
 static inline bool fuse_stale_inode(const struct inode *inode, int generation,
