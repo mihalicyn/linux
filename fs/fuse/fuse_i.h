@@ -1019,7 +1019,7 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
  * Send FORGET command
  */
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup);
+		       u64 nodeid, u64 nlookup, bool stale_inode_conn);
 
 struct fuse_forget_link *fuse_alloc_forget(void);
 
