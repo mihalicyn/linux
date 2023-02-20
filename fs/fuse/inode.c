@@ -124,7 +124,7 @@ static void fuse_evict_inode(struct inode *inode)
 			fuse_dax_inode_cleanup(inode);
 		if (fi->nlookup) {
 			fuse_queue_forget(fc, fi->forget, fi->nodeid,
-					  fi->nlookup, false);
+					  fi->nlookup, fuse_stale_inode_conn(inode));
 			fi->forget = NULL;
 		}
 	}

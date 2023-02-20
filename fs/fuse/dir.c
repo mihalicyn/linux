@@ -203,7 +203,8 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 	inode = d_inode_rcu(entry);
 	if (inode && fuse_is_bad(inode))
 		goto invalid;
-	else if (time_before64(fuse_dentry_time(entry), get_jiffies_64()) ||
+	else if ((inode && fuse_stale_inode_conn(inode)) ||
+		 time_before64(fuse_dentry_time(entry), get_jiffies_64()) ||
 		 (flags & (LOOKUP_EXCL | LOOKUP_REVAL | LOOKUP_RENAME_TARGET))) {
 		struct fuse_entry_out outarg;
 		FUSE_ARGS(args);
@@ -245,6 +246,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			}
 			spin_lock(&fi->lock);
 			fi->nlookup++;
+			fi->conn_gen = READ_ONCE(get_fuse_conn(inode)->conn_gen);
 			spin_unlock(&fi->lock);
 		}
 		kfree(forget);
