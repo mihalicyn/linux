@@ -110,8 +110,14 @@ static void fuse_file_put(struct fuse_file *ff, bool sync, bool isdir)
 	if (refcount_dec_and_test(&ff->count)) {
 		struct fuse_args *args = &ff->release_args->args;
 
-		if (isdir ? ff->fm->fc->flags.no_opendir : ff->fm->fc->flags.no_open) {
-			/* Do nothing when client does not implement 'open' */
+		if (fuse_stale_ff(ff) ||
+		    (isdir ? ff->fm->fc->flags.no_opendir : ff->fm->fc->flags.no_open)) {
+			/*
+			 * Do nothing when client does not implement 'open' OR
+			 * file descriptor was opened in the previous connection generation,
+			 * so, current daemon likely not aware of this FD, let's just skip
+			 * FUSE_RELEASE(DIR) request.
+			 */
 			fuse_release_end(ff->fm, args, 0);
 		} else if (sync) {
 			fuse_simple_request(ff->fm, args);
@@ -561,9 +567,10 @@ static int fuse_fsync(struct file *file, loff_t start, loff_t end,
 {
 	struct inode *inode = file->f_mapping->host;
 	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_file *ff = file->private_data;
 	int err;
 
-	if (fuse_is_bad(inode))
+	if (fuse_stale_ff(ff) || fuse_is_bad(inode))
 		return -EIO;
 
 	inode_lock(inode);

@@ -968,7 +968,8 @@ static inline bool fuse_stale_inode(const struct inode *inode, int generation,
 				    struct fuse_attr *attr)
 {
 	return inode->i_generation != generation ||
-		inode_wrong_type(inode, attr->mode);
+		inode_wrong_type(inode, attr->mode) ||
+		fuse_stale_inode_conn(inode);
 }
 
 static inline void fuse_make_bad(struct inode *inode)
