@@ -579,6 +579,96 @@ static int mnt_make_readonly(struct mount *mnt)
 	return ret;
 }
 
+struct bind_mount_list_item {
+	struct list_head list;
+	struct vfsmount *mnt;
+};
+
+/*
+ * sb_revalidate_bindmounts - Relookup/reset bindmounts root dentries
+ *
+ * Useful if for some reason bindmount root dentries get invalidated
+ * but it's needed to revalidate existing bindmounts without remounting.
+ */
+int sb_revalidate_bindmounts(struct super_block *sb)
+{
+	struct mount *mnt;
+	struct bind_mount_list_item *bmnt, *next;
+	int err = 0;
+	struct vfsmount *root_mnt = NULL;
+	LIST_HEAD(mnt_to_update);
+	char *buf;
+
+	buf = (char *) __get_free_page(GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	lock_mount_hash();
+	list_for_each_entry(mnt, &sb->s_mounts, mnt_instance) {
+		/* we only want to touch bindmounts */
+		if (mnt->mnt.mnt_root == sb->s_root) {
+			if (!root_mnt)
+				root_mnt = mntget(&mnt->mnt);
+
+			continue;
+		}
+
+		bmnt = kzalloc(sizeof(struct bind_mount_list_item), GFP_NOWAIT | __GFP_NOWARN);
+		if (!bmnt) {
+			err = -ENOMEM;
+			goto exit;
+		}
+
+		bmnt->mnt = mntget(&mnt->mnt);
+		list_add_tail(&bmnt->list, &mnt_to_update);
+	}
+	unlock_mount_hash();
+
+	/* TODO: get rid of this limitation */
+	if (!root_mnt) {
+		err = -ENOENT;
+		goto exit;
+	}
+
+	list_for_each_entry_safe(bmnt, next, &mnt_to_update, list) {
+		struct vfsmount *cur_mnt = bmnt->mnt;
+		struct path path;
+		struct dentry *old_root;
+		char *p;
+
+		p = dentry_path(cur_mnt->mnt_root, buf, PAGE_SIZE);
+		if (IS_ERR(p))
+			goto exit;
+
+		/* TODO: are these lookup flags fully safe and correct? */
+		err = vfs_path_lookup(root_mnt->mnt_root, root_mnt,
+				p, LOOKUP_FOLLOW|LOOKUP_AUTOMOUNT|LOOKUP_REVAL, &path);
+		if (err)
+			goto exit;
+
+		/* replace bindmount root dentry */
+		lock_mount_hash();
+		old_root = cur_mnt->mnt_root;
+		cur_mnt->mnt_root = dget(path.dentry);
+		dput(old_root);
+		unlock_mount_hash();
+
+		path_put(&path);
+	}
+
+exit:
+	free_page((unsigned long) buf);
+	mntput(root_mnt);
+	list_for_each_entry_safe(bmnt, next, &mnt_to_update, list) {
+		list_del(&bmnt->list);
+		mntput(bmnt->mnt);
+		kfree(bmnt);
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(sb_revalidate_bindmounts);
+
 int sb_prepare_remount_readonly(struct super_block *sb)
 {
 	struct mount *mnt;
