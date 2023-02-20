@@ -13,6 +13,7 @@
 #include <linux/poll.h>
 #include <linux/sched/signal.h>
 #include <linux/uio.h>
+#include <linux/mnt_namespace.h>
 #include <linux/miscdevice.h>
 #include <linux/pagemap.h>
 #include <linux/file.h>
@@ -2313,6 +2314,27 @@ static int fuse_reinit_conn(struct fuse_conn *fc)
 	return 0;
 }
 
+static ssize_t fuse_revalidate_bindmounts(struct fuse_conn *fc)
+{
+	int ret = 0;
+
+	down_read(&fc->killsb);
+	if (!list_empty(&fc->mounts)) {
+		struct fuse_mount *fm;
+
+		fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+		if (!fm->sb) {
+			up_read(&fc->killsb);
+			return -EINVAL;
+		}
+
+		ret = sb_revalidate_bindmounts(fm->sb);
+	}
+	up_read(&fc->killsb);
+
+	return ret;
+}
+
 void fuse_wait_aborted(struct fuse_conn *fc)
 {
 	/* matches implicit memory barrier in fuse_drop_waiting() */
@@ -2410,6 +2432,7 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 		fdput(f);
 		break;
 	case FUSE_DEV_IOC_REINIT:
+	case FUSE_DEV_IOC_BM_REVAL:
 		struct fuse_conn *fc;
 
 		if (!checkpoint_restore_ns_capable(file->f_cred->user_ns))
@@ -2430,7 +2453,11 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 			mutex_unlock(&fuse_mutex);
 
 			if (fc) {
-				res = fuse_reinit_conn(fc);
+				if (cmd == FUSE_DEV_IOC_REINIT)
+					res = fuse_reinit_conn(fc);
+				else if (cmd == FUSE_DEV_IOC_BM_REVAL)
+					res = fuse_revalidate_bindmounts(fc);
+
 				fuse_conn_put(fc);
 			}
 		}
