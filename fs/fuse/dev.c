@@ -2187,6 +2187,132 @@ void fuse_abort_conn(struct fuse_conn *fc)
 }
 EXPORT_SYMBOL_GPL(fuse_abort_conn);
 
+static int fuse_reinit_conn(struct fuse_conn *fc)
+{
+	struct fuse_iqueue *fiq = &fc->iq;
+	struct fuse_dev *fud;
+	unsigned int i;
+
+	spin_lock(&fc->lock);
+	if (fc->reinit_in_progress) {
+		spin_unlock(&fc->lock);
+		return -EBUSY;
+	}
+
+	if (fc->conn_gen + 1 < fc->conn_gen) {
+		spin_unlock(&fc->lock);
+		return -EOVERFLOW;
+	}
+
+	fc->reinit_in_progress = true;
+	spin_unlock(&fc->lock);
+
+	/*
+	 * Unsets fc->connected and fiq->connected and
+	 * ensures that no new requests can be queued
+	 */
+	fuse_abort_conn(fc);
+	fuse_wait_aborted(fc);
+
+	spin_lock(&fc->lock);
+	if (fc->connected) {
+		fc->reinit_in_progress = false;
+		spin_unlock(&fc->lock);
+		return -EINVAL;
+	}
+
+	fc->conn_gen++;
+
+	spin_lock(&fiq->lock);
+	if (request_pending(fiq) || fiq->forget_list_tail != &fiq->forget_list_head) {
+		spin_unlock(&fiq->lock);
+		fc->reinit_in_progress = false;
+		spin_unlock(&fc->lock);
+		return -EINVAL;
+	}
+
+	if (&fuse_dev_fiq_ops != fiq->ops) {
+		spin_unlock(&fiq->lock);
+		fc->reinit_in_progress = false;
+		spin_unlock(&fc->lock);
+		return -EOPNOTSUPP;
+	}
+
+	fiq->connected = 1;
+	spin_unlock(&fiq->lock);
+
+	spin_lock(&fc->bg_lock);
+	if (!list_empty(&fc->bg_queue)) {
+		spin_unlock(&fc->bg_lock);
+		fc->reinit_in_progress = false;
+		spin_unlock(&fc->lock);
+		return -EINVAL;
+	}
+
+	fc->blocked = 0;
+	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
+	spin_unlock(&fc->bg_lock);
+
+	list_for_each_entry(fud, &fc->devices, entry) {
+		struct fuse_pqueue *fpq = &fud->pq;
+
+		spin_lock(&fpq->lock);
+		if (!list_empty(&fpq->io)) {
+			spin_unlock(&fpq->lock);
+			fc->reinit_in_progress = false;
+			spin_unlock(&fc->lock);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++) {
+			if (!list_empty(&fpq->processing[i])) {
+				spin_unlock(&fpq->lock);
+				fc->reinit_in_progress = false;
+				spin_unlock(&fc->lock);
+				return -EINVAL;
+			}
+		}
+
+		fpq->connected = 1;
+		spin_unlock(&fpq->lock);
+	}
+
+	fuse_set_initialized(fc);
+
+	/* Background queuing checks fc->connected under bg_lock */
+	spin_lock(&fc->bg_lock);
+	fc->connected = 1;
+	spin_unlock(&fc->bg_lock);
+
+	fc->aborted = false;
+	fc->abort_err = 0;
+
+	/* nullify all the flags */
+	memset(&fc->flags, 0, sizeof(struct fuse_conn_flags));
+
+	spin_unlock(&fc->lock);
+
+	down_read(&fc->killsb);
+	if (!list_empty(&fc->mounts)) {
+		struct fuse_mount *fm;
+
+		fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+		if (!fm->sb) {
+			up_read(&fc->killsb);
+			return -EINVAL;
+		}
+
+		fuse_send_init(fm);
+	}
+	up_read(&fc->killsb);
+
+	spin_lock(&fc->lock);
+	fc->reinit_in_progress = false;
+	spin_unlock(&fc->lock);
+
+	return 0;
+}
+
 void fuse_wait_aborted(struct fuse_conn *fc)
 {
 	/* matches implicit memory barrier in fuse_drop_waiting() */
@@ -2282,6 +2408,32 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 			mutex_unlock(&fuse_mutex);
 		}
 		fdput(f);
+		break;
+	case FUSE_DEV_IOC_REINIT:
+		struct fuse_conn *fc;
+
+		if (!checkpoint_restore_ns_capable(file->f_cred->user_ns))
+			return -EPERM;
+
+		res = -EINVAL;
+		fud = fuse_get_dev(file);
+
+		/*
+		 * Only fuse mounts with an already initialized fuse
+		 * connection are supported
+		 */
+		if (file->f_op == &fuse_dev_operations && fud) {
+			mutex_lock(&fuse_mutex);
+			fc = fud->fc;
+			if (fc)
+				fc = fuse_conn_get(fc);
+			mutex_unlock(&fuse_mutex);
+
+			if (fc) {
+				res = fuse_reinit_conn(fc);
+				fuse_conn_put(fc);
+			}
+		}
 		break;
 	default:
 		res = -ENOTTY;
