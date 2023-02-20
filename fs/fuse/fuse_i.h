@@ -760,6 +760,9 @@ struct fuse_conn {
 	/** Connection aborted via sysfs */
 	bool aborted;
 
+	/** Connection reinit in progress */
+	bool reinit_in_progress;
+
 	/** Connection failed (version mismatch).  Cannot race with
 	    setting other bitfields since it is only set once in INIT
 	    reply, before any other request, and never cleared */
