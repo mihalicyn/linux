@@ -71,6 +71,13 @@ static unsigned long enforced_nproc_rlimit(void)
 	return limit;
 }
 
+static atomic_long_t last_userns_id;
+
+unsigned long get_userns_id(void)
+{
+	return atomic_long_inc_return(&last_userns_id);
+}
+
 /*
  * Create a new user namespace, deriving the creator from the user in the
  * passed credentials, and replacing that user with the new root user for the
@@ -133,6 +140,7 @@ int create_user_ns(struct cred *new)
 	/* Leave the new->user_ns reference with the new user namespace. */
 	ns->parent = parent_ns;
 	ns->level = parent_ns->level + 1;
+	ns->id = get_userns_id();
 	ns->owner = owner;
 	ns->group = group;
 	INIT_WORK(&ns->work, free_user_ns);
@@ -1267,6 +1275,83 @@ ssize_t proc_setgroups_write(struct file *file, const char __user *buf,
 		if (ns->gid_map.nr_extents != 0)
 			goto out_unlock;
 		ns->flags &= ~USERNS_SETGROUPS_ALLOWED;
+	}
+	mutex_unlock(&userns_state_mutex);
+
+	/* Report a successful write */
+	*ppos = count;
+	ret = count;
+out:
+	return ret;
+out_unlock:
+	mutex_unlock(&userns_state_mutex);
+	goto out;
+}
+
+int proc_isolated_uns_show(struct seq_file *seq, void *v)
+{
+	struct user_namespace *ns = seq->private;
+	unsigned long userns_flags = READ_ONCE(ns->flags);
+
+	seq_printf(seq, "%s\n",
+		   (userns_flags & USERNS_ISOLATED) ?
+		   "yes" : "no");
+	return 0;
+}
+
+ssize_t proc_isolated_uns_write(struct file *file, const char __user *buf,
+			     size_t count, loff_t *ppos)
+{
+	struct seq_file *seq = file->private_data;
+	struct user_namespace *ns = seq->private;
+	struct user_namespace *seq_ns = seq_user_ns(seq);
+	char kbuf[8], *pos;
+	bool isolated;
+	ssize_t ret;
+
+	if (!ns->parent)
+		return -EPERM;
+
+	if ((seq_ns != ns) && (seq_ns != ns->parent))
+		return -EPERM;
+
+	/* Only allow a very narrow range of strings to be written */
+	ret = -EINVAL;
+	if ((*ppos != 0) || (count >= sizeof(kbuf)))
+		goto out;
+
+	/* What was written? */
+	ret = -EFAULT;
+	if (copy_from_user(kbuf, buf, count))
+		goto out;
+	kbuf[count] = '\0';
+	pos = kbuf;
+
+	/* What is being requested? */
+	ret = -EINVAL;
+	if (strncmp(pos, "yes", 3) == 0) {
+		pos += 3;
+		isolated = true;
+	}
+	else if (strncmp(pos, "no", 2) == 0) {
+		pos += 2;
+		isolated = false;
+	}
+	else
+		goto out;
+
+	/* Verify there is not trailing junk on the line */
+	pos = skip_spaces(pos);
+	if (*pos != '\0')
+		goto out;
+
+	ret = -EPERM;
+	mutex_lock(&userns_state_mutex);
+	if (isolated) {
+		ns->flags |= USERNS_ISOLATED;
+	} else {
+		if (ns->flags & USERNS_ISOLATED)
+			goto out_unlock;
 	}
 	mutex_unlock(&userns_state_mutex);
 

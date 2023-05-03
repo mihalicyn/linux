@@ -32,6 +32,7 @@ struct uid_gid_map { /* 64 bytes -- 1 cache line */
 };
 
 #define USERNS_SETGROUPS_ALLOWED 1UL
+#define USERNS_ISOLATED 2UL
 
 #define USERNS_INIT_FLAGS USERNS_SETGROUPS_ALLOWED
 
@@ -75,6 +76,7 @@ struct user_namespace {
 	struct uid_gid_map	projid_map;
 	struct user_namespace	*parent;
 	int			level;
+	u32			id;
 	kuid_t			owner;
 	kgid_t			group;
 	struct ns_common	ns;
@@ -182,6 +184,8 @@ extern ssize_t proc_gid_map_write(struct file *, const char __user *, size_t, lo
 extern ssize_t proc_projid_map_write(struct file *, const char __user *, size_t, loff_t *);
 extern ssize_t proc_setgroups_write(struct file *, const char __user *, size_t, loff_t *);
 extern int proc_setgroups_show(struct seq_file *m, void *v);
+extern ssize_t proc_isolated_uns_write(struct file *, const char __user *, size_t, loff_t *);
+extern int proc_isolated_uns_show(struct seq_file *m, void *v);
 extern bool userns_may_setgroups(const struct user_namespace *ns);
 extern bool in_userns(const struct user_namespace *ancestor,
 		       const struct user_namespace *child);

@@ -3171,6 +3171,57 @@ static const struct file_operations proc_setgroups_operations = {
 	.llseek		= seq_lseek,
 	.release	= proc_setgroups_release,
 };
+
+static int proc_isolated_uns_open(struct inode *inode, struct file *file)
+{
+	struct user_namespace *ns = NULL;
+	struct task_struct *task;
+	int ret;
+
+	ret = -ESRCH;
+	task = get_proc_task(inode);
+	if (task) {
+		rcu_read_lock();
+		ns = get_user_ns(task_cred_xxx(task, user_ns));
+		rcu_read_unlock();
+		put_task_struct(task);
+	}
+	if (!ns)
+		goto err;
+
+	if (file->f_mode & FMODE_WRITE) {
+		ret = -EACCES;
+		if (!ns_capable(ns, CAP_SYS_ADMIN))
+			goto err_put_ns;
+	}
+
+	ret = single_open(file, &proc_isolated_uns_show, ns);
+	if (ret)
+		goto err_put_ns;
+
+	return 0;
+err_put_ns:
+	put_user_ns(ns);
+err:
+	return ret;
+}
+
+static int proc_isolated_uns_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct user_namespace *ns = seq->private;
+	int ret = single_release(inode, file);
+	put_user_ns(ns);
+	return ret;
+}
+
+static const struct file_operations proc_isolated_uns_operations = {
+	.open		= proc_isolated_uns_open,
+	.write		= proc_isolated_uns_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= proc_isolated_uns_release,
+};
 #endif /* CONFIG_USER_NS */
 
 static int proc_pid_personality(struct seq_file *m, struct pid_namespace *ns,
@@ -3339,6 +3390,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
 	REG("setgroups",  S_IRUGO|S_IWUSR, proc_setgroups_operations),
+	REG("isolated_uns",  S_IRUGO|S_IWUSR, proc_isolated_uns_operations),
 #endif
 #if defined(CONFIG_CHECKPOINT_RESTORE) && defined(CONFIG_POSIX_TIMERS)
 	REG("timers",	  S_IRUGO, proc_timers_operations),
@@ -3685,6 +3737,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
 	REG("setgroups",  S_IRUGO|S_IWUSR, proc_setgroups_operations),
+	REG("isolated_uns",  S_IRUGO|S_IWUSR, proc_isolated_uns_operations),
 #endif
 #ifdef CONFIG_LIVEPATCH
 	ONE("patch_state",  S_IRUSR, proc_pid_patch_state),
