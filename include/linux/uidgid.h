@@ -42,6 +42,16 @@ static inline gid_t __kgid_val(kgid_t gid)
 {
 	return gid.val;
 }
+
+static inline gid_t __kgid_gid(kgid_t gid)
+{
+	return __kgid_val(gid);
+}
+
+static inline gid_t __kgid_host_gid(kgid_t gid)
+{
+	return __kgid_val(gid);
+}
 #else
 static inline uid_t __kuid_val(kuid_t uid)
 {
@@ -59,6 +69,16 @@ static inline uid_t __kuid_host_uid(kuid_t uid)
 }
 
 static inline gid_t __kgid_val(kgid_t gid)
+{
+	return 0;
+}
+
+static inline gid_t __kgid_gid(kgid_t gid)
+{
+	return 0;
+}
+
+static inline gid_t __kgid_host_gid(kgid_t gid)
 {
 	return 0;
 }
@@ -172,7 +192,7 @@ static inline uid_t from_kuid(struct user_namespace *to, kuid_t kuid)
 
 static inline gid_t from_kgid(struct user_namespace *to, kgid_t kgid)
 {
-	return __kgid_val(kgid);
+	return __kgid_gid(kgid);
 }
 
 static inline uid_t from_kuid_munged(struct user_namespace *to, kuid_t kuid)

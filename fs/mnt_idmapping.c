@@ -113,7 +113,7 @@ vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
 	if (idmap == &nop_mnt_idmap)
 		return VFSGIDT_INIT(kgid);
 	if (initial_idmapping(fs_userns))
-		gid = __kgid_val(kgid);
+		gid = __kgid_host_gid(kgid);
 	else
 		gid = from_kgid(fs_userns, kgid);
 	if (gid == (gid_t)-1)
