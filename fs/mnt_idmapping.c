@@ -76,7 +76,7 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 	if (idmap == &nop_mnt_idmap)
 		return VFSUIDT_INIT(kuid);
 	if (initial_idmapping(fs_userns))
-		uid = __kuid_val(kuid);
+		uid = __kuid_host_uid(kuid);
 	else
 		uid = from_kuid(fs_userns, kuid);
 	if (uid == (uid_t)-1)
