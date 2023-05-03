@@ -425,8 +425,19 @@ u32 map_id_up(struct uid_gid_map *map, u32 id)
  */
 kuid_t make_kuid(struct user_namespace *ns, uid_t uid)
 {
+	bool isolated = false;
+	u32 res_uid;
+	u32 down_uid = map_id_down(&ns->uid_map, uid);
+
+	if ((ns->flags & USERNS_ISOLATED) && (down_uid == (u32) -1)) {
+		isolated = true;
+		res_uid = uid;
+	} else {
+		res_uid = down_uid;
+	}
+
 	/* Map the uid to a global kernel uid */
-	return KUIDT_INIT(0, map_id_down(&ns->uid_map, uid));
+	return KUIDT_INIT(isolated ? ns->id : 0, res_uid);
 }
 EXPORT_SYMBOL(make_kuid);
 
@@ -444,8 +455,18 @@ EXPORT_SYMBOL(make_kuid);
  */
 uid_t from_kuid(struct user_namespace *targ, kuid_t kuid)
 {
-	/* Map the uid from a global kernel uid */
-	return map_id_up(&targ->uid_map, __kuid_host_uid(kuid));
+	uid_t res_uid;
+
+	if (!kuid.uns_id) {
+		/* Map the uid from a global kernel uid */
+		res_uid = map_id_up(&targ->uid_map, __kuid_uid(kuid));
+	} else if ((targ->flags & USERNS_ISOLATED) && (targ->id == kuid.uns_id)) {
+		res_uid = __kuid_uid(kuid);
+	} else {
+		res_uid = (uid_t)-1;
+	}
+
+	return res_uid;
 }
 EXPORT_SYMBOL(from_kuid);
 
@@ -457,7 +478,7 @@ EXPORT_SYMBOL(from_kuid);
  *	Map @kuid into the user-namespace specified by @targ and
  *	return the resulting uid.
  *
- *	There is always a mapping into the initial user_namespace.
+ *	There is always a mapping into the initial user_namespace. [Not true anymore]
  *
  *	Unlike from_kuid from_kuid_munged never fails and always
  *	returns a valid uid.  This makes from_kuid_munged appropriate
