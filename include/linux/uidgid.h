@@ -145,9 +145,19 @@ static inline bool uid_valid(kuid_t uid)
 	return __kuid_val(uid) != (uid_t) -1;
 }
 
+static inline bool uid_is_isolated(kuid_t uid)
+{
+	return false;
+}
+
 static inline bool gid_valid(kgid_t gid)
 {
 	return __kgid_val(gid) != (gid_t) -1;
+}
+
+static inline bool gid_is_isolated(kgid_t gid)
+{
+	return false;
 }
 
 #ifdef CONFIG_USER_NS

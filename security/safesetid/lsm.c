@@ -37,6 +37,9 @@ enum sid_policy_type _setid_policy_lookup(struct setid_ruleset *policy,
 	enum sid_policy_type result = SIDPOL_DEFAULT;
 
 	if (policy->type == UID) {
+		if (uid_is_isolated(src.uid))
+			return 0;
+
 		hash_for_each_possible(policy->rules, rule, next, __kuid_val(src.uid)) {
 			if (!uid_eq(rule->src_id.uid, src.uid))
 				continue;
@@ -45,6 +48,9 @@ enum sid_policy_type _setid_policy_lookup(struct setid_ruleset *policy,
 			result = SIDPOL_CONSTRAINED;
 		}
 	} else if (policy->type == GID) {
+		if (gid_is_isolated(src.gid))
+			return 0;
+
 		hash_for_each_possible(policy->rules, rule, next, __kgid_val(src.gid)) {
 			if (!gid_eq(rule->src_id.gid, src.gid))
 				continue;
