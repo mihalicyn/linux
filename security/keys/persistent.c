@@ -20,7 +20,7 @@ unsigned persistent_keyring_expiry = 3 * 24 * 3600; /* Expire after 3 days of no
 static int key_create_persistent_register(struct user_namespace *ns)
 {
 	struct key *reg = keyring_alloc(".persistent_register",
-					KUIDT_INIT(0), KGIDT_INIT(0),
+					KUIDT_INIT(0, 0), KGIDT_INIT(0),
 					current_cred(),
 					((KEY_POS_ALL & ~KEY_POS_SETATTR) |
 					 KEY_USR_VIEW | KEY_USR_READ),

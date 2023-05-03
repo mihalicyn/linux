@@ -173,7 +173,7 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 	if (uid == (uid_t)-1)
 		return INVALID_UID;
 	if (initial_idmapping(fs_userns))
-		return KUIDT_INIT(uid);
+		return KUIDT_INIT(0, uid);
 	return make_kuid(fs_userns, uid);
 }
 EXPORT_SYMBOL_GPL(from_vfsuid);
