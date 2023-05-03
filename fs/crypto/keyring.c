@@ -193,7 +193,7 @@ static void format_mk_user_description(
 {
 
 	sprintf(description, "%*phN.uid.%u", FSCRYPT_KEY_IDENTIFIER_SIZE,
-		mk_identifier, __kuid_val(current_fsuid()));
+		mk_identifier, __kuid_host_uid(current_fsuid()));
 }
 
 /* Create ->s_master_keys if needed.  Synchronized by fscrypt_add_key_mutex. */
