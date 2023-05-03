@@ -93,7 +93,7 @@ static inline bool vfsuid_eq_kuid(vfsuid_t vfsuid, kuid_t kuid)
  */
 static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
 {
-	return vfsgid_valid(vfsgid) && __vfsgid_val(vfsgid) == __kgid_val(kgid);
+	return vfsgid_valid(vfsgid) && __vfsgid_val(vfsgid) == __kgid_host_gid(kgid);
 }
 
 /*
@@ -101,7 +101,7 @@ static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
  * We don't allow them to be created from regular {u,g}id.
  */
 #define VFSUIDT_INIT(val) (vfsuid_t){ __kuid_host_uid(val) }
-#define VFSGIDT_INIT(val) (vfsgid_t){ __kgid_val(val) }
+#define VFSGIDT_INIT(val) (vfsgid_t){ __kgid_host_gid(val) }
 
 #define INVALID_VFSUID VFSUIDT_INIT(INVALID_UID)
 #define INVALID_VFSGID VFSGIDT_INIT(INVALID_GID)
