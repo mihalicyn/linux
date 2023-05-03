@@ -201,7 +201,7 @@ kgid_t from_vfsgid(struct mnt_idmap *idmap,
 	if (gid == (gid_t)-1)
 		return INVALID_GID;
 	if (initial_idmapping(fs_userns))
-		return KGIDT_INIT(gid);
+		return KGIDT_INIT(0, gid);
 	return make_kgid(fs_userns, gid);
 }
 EXPORT_SYMBOL_GPL(from_vfsgid);

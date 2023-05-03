@@ -20,7 +20,7 @@ typedef struct {
 } vfsgid_t;
 
 static_assert(sizeof(vfsuid_t) <= sizeof(kuid_t));
-static_assert(sizeof(vfsgid_t) == sizeof(kgid_t));
+static_assert(sizeof(vfsgid_t) <= sizeof(kgid_t));
 static_assert(offsetof(vfsuid_t, val) == offsetof(kuid_t, val));
 static_assert(offsetof(vfsgid_t, val) == offsetof(kgid_t, val));
 
@@ -111,7 +111,7 @@ static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
  * whether the mapped value is identical to value of a k{g,u}id.
  */
 #define AS_KUIDT(val) (kuid_t){ .uid_val = __vfsuid_val(val) }
-#define AS_KGIDT(val) (kgid_t){ __vfsgid_val(val) }
+#define AS_KGIDT(val) (kgid_t){ .gid_val = __vfsgid_val(val) }
 
 int vfsgid_in_group_p(vfsgid_t vfsgid);
 

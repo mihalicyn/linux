@@ -286,7 +286,7 @@ static int sid_to_id(struct mnt_idmap *idmap,
 		gid_t id;
 
 		id = le32_to_cpu(psid->sub_auth[psid->num_subauth - 1]);
-		gid = KGIDT_INIT(id);
+		gid = KGIDT_INIT(0, id);
 		gid = from_vfsgid(idmap, &init_user_ns, VFSGIDT_INIT(gid));
 		if (gid_valid(gid)) {
 			fattr->cf_gid = gid;

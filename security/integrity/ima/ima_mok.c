@@ -34,7 +34,7 @@ static __init int ima_mok_init(void)
 	restriction->check = restrict_link_by_builtin_trusted;
 
 	ima_blacklist_keyring = keyring_alloc(".ima_blacklist",
-				KUIDT_INIT(0, 0), KGIDT_INIT(0), current_cred(),
+				KUIDT_INIT(0, 0), KGIDT_INIT(0, 0), current_cred(),
 				(KEY_POS_ALL & ~KEY_POS_SETATTR) |
 				KEY_USR_VIEW | KEY_USR_READ |
 				KEY_USR_WRITE | KEY_USR_SEARCH,
