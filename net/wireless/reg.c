@@ -745,7 +745,7 @@ static int __init load_builtin_regdb_keys(void)
 {
 	builtin_regdb_keys =
 		keyring_alloc(".builtin_regdb_keys",
-			      KUIDT_INIT(0), KGIDT_INIT(0), current_cred(),
+			      KUIDT_INIT(0, 0), KGIDT_INIT(0), current_cred(),
 			      ((KEY_POS_ALL & ~KEY_POS_SETATTR) |
 			      KEY_USR_VIEW | KEY_USR_READ | KEY_USR_SEARCH),
 			      KEY_ALLOC_NOT_IN_QUOTA, NULL, NULL);
