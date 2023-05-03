@@ -15,27 +15,30 @@
 #include <linux/uidgid_types.h>
 #include <linux/highuid.h>
 
+#include <linux/bug.h>
+
 struct user_namespace;
 extern struct user_namespace init_user_ns;
 struct uid_gid_map;
 
-#define KUIDT_INIT(value) (kuid_t){ value }
+#define KUIDT_INIT(nsid, value) (kuid_t){ .uns_id = nsid, .uid_val = value }
 #define KGIDT_INIT(value) (kgid_t){ value }
 
 #ifdef CONFIG_MULTIUSER
-static inline uid_t __kuid_val(kuid_t uid)
+static inline u64 __kuid_val(kuid_t uid)
 {
 	return uid.val;
 }
 
 static inline uid_t __kuid_uid(kuid_t uid)
 {
-	return __kuid_val(uid);
+	return uid.uid_val;
 }
 
 static inline uid_t __kuid_host_uid(kuid_t uid)
 {
-	return __kuid_val(uid);
+	WARN_ON_ONCE(uid.uns_id);
+	return uid.uid_val;
 }
 
 static inline gid_t __kgid_val(kgid_t gid)
@@ -53,7 +56,7 @@ static inline gid_t __kgid_host_gid(kgid_t gid)
 	return __kgid_val(gid);
 }
 #else
-static inline uid_t __kuid_val(kuid_t uid)
+static inline u64 __kuid_val(kuid_t uid)
 {
 	return 0;
 }
@@ -84,10 +87,10 @@ static inline gid_t __kgid_host_gid(kgid_t gid)
 }
 #endif
 
-#define GLOBAL_ROOT_UID KUIDT_INIT(0)
+#define GLOBAL_ROOT_UID KUIDT_INIT(0, 0)
 #define GLOBAL_ROOT_GID KGIDT_INIT(0)
 
-#define INVALID_UID KUIDT_INIT(-1)
+#define INVALID_UID KUIDT_INIT(0, -1)
 #define INVALID_GID KGIDT_INIT(-1)
 
 static inline bool uid_eq(kuid_t left, kuid_t right)
@@ -142,12 +145,12 @@ static inline bool gid_lte(kgid_t left, kgid_t right)
 
 static inline bool uid_valid(kuid_t uid)
 {
-	return __kuid_val(uid) != (uid_t) -1;
+	return __kuid_uid(uid) != (uid_t) -1;
 }
 
 static inline bool uid_is_isolated(kuid_t uid)
 {
-	return false;
+	return !!uid.uns_id;
 }
 
 static inline bool gid_valid(kgid_t gid)
@@ -187,7 +190,7 @@ u32 map_id_up(struct uid_gid_map *map, u32 id);
 
 static inline kuid_t make_kuid(struct user_namespace *from, uid_t uid)
 {
-	return KUIDT_INIT(uid);
+	return KUIDT_INIT(0, uid);
 }
 
 static inline kgid_t make_kgid(struct user_namespace *from, gid_t gid)

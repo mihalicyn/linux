@@ -77,7 +77,7 @@ struct ima_rule_opt_list {
  */
 static inline bool vfsuid_gt_kuid(vfsuid_t vfsuid, kuid_t kuid)
 {
-	return __vfsuid_val(vfsuid) > __kuid_host_uid(kuid);
+	return __vfsuid_val(vfsuid) > __kuid_val(kuid);
 }
 
 static inline bool vfsgid_gt_kgid(vfsgid_t vfsgid, kgid_t kgid)
@@ -87,7 +87,7 @@ static inline bool vfsgid_gt_kgid(vfsgid_t vfsgid, kgid_t kgid)
 
 static inline bool vfsuid_lt_kuid(vfsuid_t vfsuid, kuid_t kuid)
 {
-	return __vfsuid_val(vfsuid) < __kuid_host_uid(kuid);
+	return __vfsuid_val(vfsuid) < __kuid_val(kuid);
 }
 
 static inline bool vfsgid_lt_kgid(vfsgid_t vfsgid, kgid_t kgid)

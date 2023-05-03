@@ -5,7 +5,13 @@
 #include <linux/types.h>
 
 typedef struct {
-	uid_t val;
+	union {
+		u64 val;
+		struct {
+			uid_t uid_val;
+			uid_t uns_id;
+		};
+	};
 } kuid_t;
 
 typedef struct {

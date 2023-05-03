@@ -411,7 +411,7 @@ u32 map_id_up(struct uid_gid_map *map, u32 id)
 kuid_t make_kuid(struct user_namespace *ns, uid_t uid)
 {
 	/* Map the uid to a global kernel uid */
-	return KUIDT_INIT(map_id_down(&ns->uid_map, uid));
+	return KUIDT_INIT(0, map_id_down(&ns->uid_map, uid));
 }
 EXPORT_SYMBOL(make_kuid);
 
@@ -430,7 +430,7 @@ EXPORT_SYMBOL(make_kuid);
 uid_t from_kuid(struct user_namespace *targ, kuid_t kuid)
 {
 	/* Map the uid from a global kernel uid */
-	return map_id_up(&targ->uid_map, __kuid_val(kuid));
+	return map_id_up(&targ->uid_map, __kuid_host_uid(kuid));
 }
 EXPORT_SYMBOL(from_kuid);
 
@@ -610,7 +610,7 @@ static int uid_m_show(struct seq_file *seq, void *v)
 	if ((lower_ns == ns) && lower_ns->parent)
 		lower_ns = lower_ns->parent;
 
-	lower = from_kuid(lower_ns, KUIDT_INIT(extent->lower_first));
+	lower = from_kuid(lower_ns, KUIDT_INIT(0, extent->lower_first));
 
 	seq_printf(seq, "%10u %10u %10u\n",
 		extent->first,

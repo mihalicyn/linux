@@ -13,7 +13,7 @@
  * Outside of this file vfs{g,u}id_t are always created from k{g,u}id_t,
  * never from raw values. These are just internal helpers.
  */
-#define VFSUIDT_INIT_RAW(val) (vfsuid_t){ val }
+#define VFSUIDT_INIT_RAW(val) (vfsuid_t){ .uid_val = val }
 #define VFSGIDT_INIT_RAW(val) (vfsgid_t){ val }
 
 struct mnt_idmap {
@@ -140,11 +140,11 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 
 	if (idmap == &nop_mnt_idmap)
 		return AS_KUIDT(vfsuid);
-	uid = map_id_up(&idmap->uid_map, __vfsuid_val(vfsuid));
+	uid = map_id_up(&idmap->uid_map, __vfsuid_uid(vfsuid));
 	if (uid == (uid_t)-1)
 		return INVALID_UID;
 	if (initial_idmapping(fs_userns))
-		return KUIDT_INIT(uid);
+		return KUIDT_INIT(0, uid);
 	return make_kuid(fs_userns, uid);
 }
 EXPORT_SYMBOL_GPL(from_vfsuid);
