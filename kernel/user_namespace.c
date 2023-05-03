@@ -514,8 +514,19 @@ EXPORT_SYMBOL(from_kuid_munged);
  */
 kgid_t make_kgid(struct user_namespace *ns, gid_t gid)
 {
+	bool isolated = false;
+	u32 res_gid;
+	u32 down_gid = map_id_down(&ns->gid_map, gid);
+
+	if ((ns->flags & USERNS_ISOLATED) && (down_gid == (u32) -1)) {
+		isolated = true;
+		res_gid = gid;
+	} else {
+		res_gid = down_gid;
+	}
+
 	/* Map the gid to a global kernel gid */
-	return KGIDT_INIT(0, map_id_down(&ns->gid_map, gid));
+	return KGIDT_INIT(isolated ? ns->id : 0, res_gid);
 }
 EXPORT_SYMBOL(make_kgid);
 
@@ -533,8 +544,18 @@ EXPORT_SYMBOL(make_kgid);
  */
 gid_t from_kgid(struct user_namespace *targ, kgid_t kgid)
 {
-	/* Map the gid from a global kernel gid */
-	return map_id_up(&targ->gid_map, __kgid_host_gid(kgid));
+	gid_t res_gid;
+
+	if (!kgid.uns_id) {
+		/* Map the uid from a global kernel uid */
+		res_gid = map_id_up(&targ->gid_map, __kgid_gid(kgid));
+	} else if ((targ->flags & USERNS_ISOLATED) && (targ->id == kgid.uns_id)) {
+		res_gid = __kgid_gid(kgid);
+	} else {
+		res_gid = (gid_t)-1;
+	}
+
+	return res_gid;
 }
 EXPORT_SYMBOL(from_kgid);
 
