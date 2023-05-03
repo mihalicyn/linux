@@ -122,7 +122,7 @@ int __init fsverity_init_signature(void)
 	struct key *ring;
 	int err;
 
-	ring = keyring_alloc(".fs-verity", KUIDT_INIT(0), KGIDT_INIT(0),
+	ring = keyring_alloc(".fs-verity", KUIDT_INIT(0, 0), KGIDT_INIT(0),
 			     current_cred(), KEY_POS_SEARCH |
 				KEY_USR_VIEW | KEY_USR_READ | KEY_USR_WRITE |
 				KEY_USR_SEARCH | KEY_USR_SETATTR,

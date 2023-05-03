@@ -275,7 +275,7 @@ static int sid_to_id(struct mnt_idmap *idmap,
 		uid_t id;
 
 		id = le32_to_cpu(psid->sub_auth[psid->num_subauth - 1]);
-		uid = KUIDT_INIT(id);
+		uid = KUIDT_INIT(0, id);
 		uid = from_vfsuid(idmap, &init_user_ns, VFSUIDT_INIT(uid));
 		if (uid_valid(uid)) {
 			fattr->cf_uid = uid;

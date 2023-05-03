@@ -29,9 +29,10 @@
 #define INDIRECT_CALL_MT(f, f2, f1, ...) f(__VA_ARGS__)
 #endif
 
+// FIXME
 static const struct fib_kuid_range fib_kuid_range_unset = {
-	KUIDT_INIT(0),
-	KUIDT_INIT(~0),
+	KUIDT_INIT(0, 0),
+	KUIDT_INIT(0, ~0),
 };
 
 bool fib_rule_matchall(const struct fib_rule *rule)
