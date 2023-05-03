@@ -479,7 +479,7 @@ EXPORT_SYMBOL(from_kuid_munged);
 kgid_t make_kgid(struct user_namespace *ns, gid_t gid)
 {
 	/* Map the gid to a global kernel gid */
-	return KGIDT_INIT(map_id_down(&ns->gid_map, gid));
+	return KGIDT_INIT(0, map_id_down(&ns->gid_map, gid));
 }
 EXPORT_SYMBOL(make_kgid);
 
@@ -498,7 +498,7 @@ EXPORT_SYMBOL(make_kgid);
 gid_t from_kgid(struct user_namespace *targ, kgid_t kgid)
 {
 	/* Map the gid from a global kernel gid */
-	return map_id_up(&targ->gid_map, __kgid_val(kgid));
+	return map_id_up(&targ->gid_map, __kgid_host_gid(kgid));
 }
 EXPORT_SYMBOL(from_kgid);
 
@@ -631,7 +631,7 @@ static int gid_m_show(struct seq_file *seq, void *v)
 	if ((lower_ns == ns) && lower_ns->parent)
 		lower_ns = lower_ns->parent;
 
-	lower = from_kgid(lower_ns, KGIDT_INIT(extent->lower_first));
+	lower = from_kgid(lower_ns, KGIDT_INIT(0, extent->lower_first));
 
 	seq_printf(seq, "%10u %10u %10u\n",
 		extent->first,
