@@ -82,7 +82,7 @@ static inline bool vfsuid_gt_kuid(vfsuid_t vfsuid, kuid_t kuid)
 
 static inline bool vfsgid_gt_kgid(vfsgid_t vfsgid, kgid_t kgid)
 {
-	return __vfsgid_val(vfsgid) > __kgid_val(kgid);
+	return __vfsgid_val(vfsgid) > __kgid_host_gid(kgid);
 }
 
 static inline bool vfsuid_lt_kuid(vfsuid_t vfsuid, kuid_t kuid)
@@ -92,7 +92,7 @@ static inline bool vfsuid_lt_kuid(vfsuid_t vfsuid, kuid_t kuid)
 
 static inline bool vfsgid_lt_kgid(vfsgid_t vfsgid, kgid_t kgid)
 {
-	return __vfsgid_val(vfsgid) < __kgid_val(kgid);
+	return __vfsgid_val(vfsgid) < __kgid_host_gid(kgid);
 }
 
 struct ima_rule_entry {
@@ -2174,7 +2174,7 @@ int ima_policy_show(struct seq_file *m, void *v)
 	}
 
 	if (entry->flags & IMA_GID) {
-		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_val(entry->gid));
+		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_host_gid(entry->gid));
 		if (entry->gid_op == &gid_gt)
 			seq_printf(m, pt(Opt_gid_gt), tbuf);
 		else if (entry->gid_op == &gid_lt)
@@ -2185,7 +2185,7 @@ int ima_policy_show(struct seq_file *m, void *v)
 	}
 
 	if (entry->flags & IMA_EGID) {
-		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_val(entry->gid));
+		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_host_gid(entry->gid));
 		if (entry->gid_op == &gid_gt)
 			seq_printf(m, pt(Opt_egid_gt), tbuf);
 		else if (entry->gid_op == &gid_lt)
@@ -2207,7 +2207,7 @@ int ima_policy_show(struct seq_file *m, void *v)
 	}
 
 	if (entry->flags & IMA_FGROUP) {
-		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_val(entry->fgroup));
+		snprintf(tbuf, sizeof(tbuf), "%d", __kgid_host_gid(entry->fgroup));
 		if (entry->fgroup_op == &vfsgid_gt_kgid)
 			seq_printf(m, pt(Opt_fgroup_gt), tbuf);
 		else if (entry->fgroup_op == &vfsgid_lt_kgid)
