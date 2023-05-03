@@ -19,7 +19,7 @@ static struct hlist_head ucounts_hashtable[(1 << UCOUNTS_HASHTABLE_BITS)];
 static DEFINE_SPINLOCK(ucounts_lock);
 
 #define ucounts_hashfn(ns, uid)						\
-	hash_long((unsigned long)__kuid_val(uid) + (unsigned long)(ns), \
+	hash_long((unsigned long)__kuid_uid(uid) + (unsigned long)(ns), \
 		  UCOUNTS_HASHTABLE_BITS)
 #define ucounts_hashentry(ns, uid)	\
 	(ucounts_hashtable + ucounts_hashfn(ns, uid))
