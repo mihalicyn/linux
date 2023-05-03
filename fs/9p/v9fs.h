@@ -193,7 +193,7 @@ extern struct inode *v9fs_fid_iget_dotl(struct super_block *sb,
 #define V9FS_DEFUSER	"nobody"
 #define V9FS_DEFANAME	""
 #define V9FS_DEFUID	KUIDT_INIT(0, -2)
-#define V9FS_DEFGID	KGIDT_INIT(-2)
+#define V9FS_DEFGID	KGIDT_INIT(0, -2)
 
 static inline struct v9fs_session_info *v9fs_inode2v9ses(struct inode *inode)
 {

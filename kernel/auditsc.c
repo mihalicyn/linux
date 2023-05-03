@@ -1011,7 +1011,7 @@ static void audit_reset_context(struct audit_context *ctx)
 	ctx->sockaddr_len = 0;
 	ctx->ppid = 0;
 	ctx->uid = ctx->euid = ctx->suid = ctx->fsuid = KUIDT_INIT(0, 0);
-	ctx->gid = ctx->egid = ctx->sgid = ctx->fsgid = KGIDT_INIT(0);
+	ctx->gid = ctx->egid = ctx->sgid = ctx->fsgid = KGIDT_INIT(0, 0);
 	ctx->personality = 0;
 	ctx->arch = 0;
 	ctx->target_pid = 0;

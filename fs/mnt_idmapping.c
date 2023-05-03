@@ -14,7 +14,7 @@
  * never from raw values. These are just internal helpers.
  */
 #define VFSUIDT_INIT_RAW(val) (vfsuid_t){ .uid_val = val }
-#define VFSGIDT_INIT_RAW(val) (vfsgid_t){ val }
+#define VFSGIDT_INIT_RAW(val) (vfsgid_t){ .gid_val = val }
 
 struct mnt_idmap {
 	struct uid_gid_map uid_map;
@@ -167,11 +167,11 @@ kgid_t from_vfsgid(struct mnt_idmap *idmap,
 
 	if (idmap == &nop_mnt_idmap)
 		return AS_KGIDT(vfsgid);
-	gid = map_id_up(&idmap->gid_map, __vfsgid_val(vfsgid));
+	gid = map_id_up(&idmap->gid_map, __vfsgid_gid(vfsgid));
 	if (gid == (gid_t)-1)
 		return INVALID_GID;
 	if (initial_idmapping(fs_userns))
-		return KGIDT_INIT(gid);
+		return KGIDT_INIT(0, gid);
 	return make_kgid(fs_userns, gid);
 }
 EXPORT_SYMBOL_GPL(from_vfsgid);

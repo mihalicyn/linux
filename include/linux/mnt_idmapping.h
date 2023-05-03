@@ -22,13 +22,19 @@ typedef struct {
 } vfsuid_t;
 
 typedef struct {
-	gid_t val;
+	union {
+		u64 val;
+		struct {
+			gid_t gid_val;
+			gid_t uns_id;
+		};
+	};
 } vfsgid_t;
 
 static_assert(sizeof(vfsuid_t) == sizeof(kuid_t));
 static_assert(sizeof(vfsgid_t) == sizeof(kgid_t));
 static_assert(offsetof(vfsuid_t, uid_val) == offsetof(kuid_t, uid_val));
-static_assert(offsetof(vfsgid_t, val) == offsetof(kgid_t, val));
+static_assert(offsetof(vfsgid_t, gid_val) == offsetof(kgid_t, gid_val));
 
 #ifdef CONFIG_MULTIUSER
 static inline u64 __vfsuid_val(vfsuid_t uid)
@@ -41,9 +47,14 @@ static inline uid_t __vfsuid_uid(vfsuid_t uid)
 	return uid.uid_val;
 }
 
-static inline gid_t __vfsgid_val(vfsgid_t gid)
+static inline u64 __vfsgid_val(vfsgid_t gid)
 {
 	return gid.val;
+}
+
+static inline gid_t __vfsgid_gid(vfsgid_t gid)
+{
+	return gid.gid_val;
 }
 #else
 static inline u64 __vfsuid_val(vfsuid_t uid)
@@ -56,7 +67,12 @@ static inline uid_t __vfsuid_uid(vfsuid_t uid)
 	return 0;
 }
 
-static inline gid_t __vfsgid_val(vfsgid_t gid)
+static inline u64 __vfsgid_val(vfsgid_t gid)
+{
+	return 0;
+}
+
+static inline gid_t __vfsgid_gid(vfsgid_t gid)
 {
 	return 0;
 }
@@ -69,7 +85,7 @@ static inline bool vfsuid_valid(vfsuid_t uid)
 
 static inline bool vfsgid_valid(vfsgid_t gid)
 {
-	return __vfsgid_val(gid) != (gid_t)-1;
+	return __vfsgid_gid(gid) != (gid_t)-1;
 }
 
 static inline bool vfsuid_eq(vfsuid_t left, vfsuid_t right)
@@ -109,7 +125,7 @@ static inline bool vfsuid_eq_kuid(vfsuid_t vfsuid, kuid_t kuid)
  */
 static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
 {
-	return vfsgid_valid(vfsgid) && __vfsgid_val(vfsgid) == __kgid_host_gid(kgid);
+	return vfsgid_valid(vfsgid) && __vfsgid_val(vfsgid) == __kgid_val(kgid);
 }
 
 /*
@@ -117,7 +133,7 @@ static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
  * We don't allow them to be created from regular {u,g}id.
  */
 #define VFSUIDT_INIT(value) (vfsuid_t){ .val = __kuid_val(value) }
-#define VFSGIDT_INIT(val) (vfsgid_t){ __kgid_host_gid(val) }
+#define VFSGIDT_INIT(value) (vfsgid_t){ .val = __kgid_val(value) }
 
 #define INVALID_VFSUID VFSUIDT_INIT(INVALID_UID)
 #define INVALID_VFSGID VFSGIDT_INIT(INVALID_GID)
@@ -127,7 +143,7 @@ static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
  * whether the mapped value is identical to value of a k{g,u}id.
  */
 #define AS_KUIDT(value) (kuid_t){ .val = __vfsuid_val(value) }
-#define AS_KGIDT(val) (kgid_t){ __vfsgid_val(val) }
+#define AS_KGIDT(value) (kgid_t){ .val = __vfsgid_val(value) }
 
 int vfsgid_in_group_p(vfsgid_t vfsgid);
 

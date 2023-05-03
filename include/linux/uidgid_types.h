@@ -15,7 +15,13 @@ typedef struct {
 } kuid_t;
 
 typedef struct {
-	gid_t val;
+	union {
+		u64 val;
+		struct {
+			gid_t gid_val;
+			gid_t uns_id;
+		};
+	};
 } kgid_t;
 
 #endif /* _LINUX_UIDGID_TYPES_H */

@@ -103,7 +103,7 @@ static int __init __integrity_init_keyring(const unsigned int id,
 	int err = 0;
 
 	keyring[id] = keyring_alloc(keyring_name[id], KUIDT_INIT(0, 0),
-				    KGIDT_INIT(0), cred, perm,
+				    KGIDT_INIT(0, 0), cred, perm,
 				    KEY_ALLOC_NOT_IN_QUOTA, restriction, NULL);
 	if (IS_ERR(keyring[id])) {
 		err = PTR_ERR(keyring[id]);
