@@ -440,17 +440,33 @@ int ceph_parse_param(struct fs_parameter *param, struct ceph_options *opt,
 		break;
 
 	case Opt_fsid:
-		err = ceph_parse_fsid(param->string, &opt->fsid);
+	{
+		struct ceph_fsid fsid;
+
+		err = ceph_parse_fsid(param->string, &fsid);
 		if (err) {
 			error_plog(&log, "Failed to parse fsid: %d", err);
 			return err;
 		}
-		opt->flags |= CEPH_OPT_FSID;
+
+		if (!(opt->flags & CEPH_OPT_FSID)) {
+			opt->fsid = fsid;
+			opt->flags |= CEPH_OPT_FSID;
+		} else if (ceph_fsid_compare(&opt->fsid, &fsid)) {
+			error_plog(&log, "fsid already set to %pU",
+				   &opt->fsid);
+			return -EINVAL;
+		}
 		break;
+	}
 	case Opt_name:
-		kfree(opt->name);
-		opt->name = param->string;
-		param->string = NULL;
+		if (!opt->name) {
+			opt->name = param->string;
+			param->string = NULL;
+		} else if (strcmp(opt->name, param->string)) {
+			error_plog(&log, "name already set to %s", opt->name);
+			return -EINVAL;
+		}
 		break;
 	case Opt_secret:
 		ceph_crypto_key_destroy(opt->key);
