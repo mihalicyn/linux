@@ -284,6 +284,7 @@ static void finish_netfs_read(struct ceph_osd_request *req)
 	}
 	netfs_subreq_terminated(subreq, err, false);
 	iput(req->r_inode);
+	ceph_dec_osd_stopping_blocker(fsc->mdsc);
 }
 
 static bool ceph_netfs_issue_op_inline(struct netfs_io_subrequest *subreq)
@@ -410,6 +411,10 @@ static void ceph_netfs_issue_read(struct netfs_io_subrequest *subreq)
 		osd_req_op_extent_osd_data_pages(req, 0, pages, len, 0, false, false);
 	} else {
 		osd_req_op_extent_osd_iter(req, 0, &iter);
+	}
+	if (!ceph_inc_osd_stopping_blocker(fsc->mdsc)) {
+		err = -EIO;
+		goto out;
 	}
 	req->r_callback = finish_netfs_read;
 	req->r_priv = subreq;
@@ -906,6 +911,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	else
 		kfree(osd_data->pages);
 	ceph_osdc_put_request(req);
+	ceph_dec_osd_stopping_blocker(fsc->mdsc);
 }
 
 /*
@@ -1214,6 +1220,10 @@ new_request:
 		BUG_ON(len < ceph_fscrypt_page_offset(pages[locked_pages - 1]) +
 			     thp_size(pages[locked_pages - 1]) - offset);
 
+		if (!ceph_inc_osd_stopping_blocker(fsc->mdsc)) {
+			rc = -EIO;
+			goto release_folios;
+		}
 		req->r_callback = writepages_finish;
 		req->r_inode = inode;
 
