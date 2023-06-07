@@ -3978,7 +3978,9 @@ static void handle_session(struct ceph_mds_session *session,
 		/* version >= 5, flags   */
 		ceph_decode_32_safe(&p, end, flags, bad);
 		if (flags & CEPH_SESSION_BLOCKLISTED) {
-			pr_warn("mds%d session blocklisted\n", session->s_mds);
+			pr_warn("client.%lld mds%d session blocklisted\n",
+				mdsc->fsc->client->monc.auth->global_id,
+				session->s_mds);
 			blocklisted = true;
 		}
 	}
