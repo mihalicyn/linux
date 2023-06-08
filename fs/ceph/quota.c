@@ -150,7 +150,7 @@ static struct inode *lookup_quotarealm_inode(struct ceph_mds_client *mdsc,
 	}
 	if (qri->inode) {
 		/* get caps */
-		int ret = __ceph_do_getattr(qri->inode, NULL,
+		int ret = __ceph_do_getattr(&nop_mnt_idmap, qri->inode, NULL,
 					    CEPH_STAT_CAP_INODE, true);
 		if (ret >= 0)
 			in = qri->inode;

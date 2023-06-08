@@ -187,7 +187,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb, u64 ino)
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 	/* We need LINK caps to reliably check i_nlink */
-	err = ceph_do_getattr(inode, CEPH_CAP_LINK_SHARED, false);
+	err = ceph_do_getattr(&nop_mnt_idmap, inode, CEPH_CAP_LINK_SHARED, false);
 	if (err) {
 		iput(inode);
 		return ERR_PTR(err);
