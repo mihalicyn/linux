@@ -2300,7 +2300,8 @@ int ceph_try_to_choose_auth_mds(struct inode *inode, int mask)
  * Verify that we have a lease on the given mask.  If not,
  * do a getattr against an mds.
  */
-int __ceph_do_getattr(struct inode *inode, struct page *locked_page,
+int __ceph_do_getattr(struct mnt_idmap *idmap, struct inode *inode,
+		      struct page *locked_page,
 		      int mask, bool force)
 {
 	struct ceph_fs_client *fsc = ceph_sb_to_client(inode->i_sb);
@@ -2325,6 +2326,7 @@ int __ceph_do_getattr(struct inode *inode, struct page *locked_page,
 		return PTR_ERR(req);
 	req->r_inode = inode;
 	ihold(inode);
+	req->r_mnt_idmap = mnt_idmap_get(idmap);
 	req->r_num_caps = 1;
 	req->r_args.getattr.mask = cpu_to_le32(mask);
 	req->r_locked_page = locked_page;
@@ -2411,7 +2413,7 @@ int ceph_permission(struct mnt_idmap *idmap, struct inode *inode,
 	if (mask & MAY_NOT_BLOCK)
 		return -ECHILD;
 
-	err = ceph_do_getattr(inode, CEPH_CAP_AUTH_SHARED, false);
+	err = ceph_do_getattr(idmap, inode, CEPH_CAP_AUTH_SHARED, false);
 
 	if (!err)
 		err = generic_permission(idmap, inode, mask);
@@ -2464,7 +2466,7 @@ int ceph_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 	/* Skip the getattr altogether if we're asked not to sync */
 	if ((flags & AT_STATX_SYNC_TYPE) != AT_STATX_DONT_SYNC) {
-		err = ceph_do_getattr(inode,
+		err = ceph_do_getattr(idmap, inode,
 				statx_to_caps(request_mask, inode->i_mode),
 				flags & AT_STATX_FORCE_SYNC);
 		if (err)
