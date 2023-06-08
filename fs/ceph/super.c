@@ -1607,8 +1607,8 @@ int ceph_force_reconnect(struct super_block *sb)
 	fsc->mount_state = CEPH_MOUNT_MOUNTED;
 
 	if (sb->s_root) {
-		err = __ceph_do_getattr(d_inode(sb->s_root), NULL,
-					CEPH_STAT_CAP_INODE, true);
+		err = __ceph_do_getattr(&nop_mnt_idmap, d_inode(sb->s_root),
+					NULL, CEPH_STAT_CAP_INODE, true);
 	}
 	return err;
 }

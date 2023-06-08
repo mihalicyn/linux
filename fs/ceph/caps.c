@@ -2958,7 +2958,8 @@ int ceph_try_get_caps(struct inode *inode, int need, int want,
  * due to a small max_size, make sure we check_max_size (and possibly
  * ask the mds) so we don't get hung up indefinitely.
  */
-int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
+int __ceph_get_caps(struct mnt_idmap *idmap, struct inode *inode,
+		    struct ceph_file_info *fi, int need,
 		    int want, loff_t endoff, int *got)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -3072,7 +3073,7 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 			 * getattr request will bring inline data into
 			 * page cache
 			 */
-			ret = __ceph_do_getattr(inode, NULL,
+			ret = __ceph_do_getattr(idmap, inode, NULL,
 						CEPH_STAT_CAP_INLINE_DATA,
 						true);
 			if (ret < 0)
@@ -3089,8 +3090,9 @@ int ceph_get_caps(struct file *filp, int need, int want, loff_t endoff, int *got
 {
 	struct ceph_file_info *fi = filp->private_data;
 	struct inode *inode = file_inode(filp);
+	struct mnt_idmap *idmap = file_mnt_idmap(filp);
 
-	return __ceph_get_caps(inode, fi, need, want, endoff, got);
+	return __ceph_get_caps(idmap, inode, fi, need, want, endoff, got);
 }
 
 /*

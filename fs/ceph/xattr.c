@@ -978,7 +978,7 @@ ssize_t __ceph_getxattr(struct inode *inode, const char *name, void *value,
 			mask |= CEPH_STAT_RSTAT;
 		if (vxattr->flags & VXATTR_FLAG_DIRSTAT)
 			mask |= CEPH_CAP_FILE_SHARED;
-		err = ceph_do_getattr(inode, mask, true);
+		err = ceph_do_getattr(&nop_mnt_idmap, inode, mask, true);
 		if (err)
 			return err;
 		err = -ENODATA;
@@ -1015,7 +1015,7 @@ handle_non_vxattrs:
 		}
 
 		/* get xattrs from mds (if we don't already have them) */
-		err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR, true);
+		err = ceph_do_getattr(&nop_mnt_idmap, inode, CEPH_STAT_CAP_XATTR, true);
 		if (err)
 			return err;
 		spin_lock(&ci->i_ceph_lock);
@@ -1064,7 +1064,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	if (ci->i_xattrs.version == 0 ||
 	    !__ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 1)) {
 		spin_unlock(&ci->i_ceph_lock);
-		err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR, true);
+		err = ceph_do_getattr(&nop_mnt_idmap, inode, CEPH_STAT_CAP_XATTR, true);
 		if (err)
 			return err;
 		spin_lock(&ci->i_ceph_lock);

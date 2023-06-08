@@ -1630,6 +1630,7 @@ static vm_fault_t ceph_filemap_fault(struct vm_fault *vmf)
 		/* does not support inline data > PAGE_SIZE */
 		ret = VM_FAULT_SIGBUS;
 	} else {
+		struct mnt_idmap *idmap = file_mnt_idmap(vma->vm_file);
 		struct address_space *mapping = inode->i_mapping;
 		struct page *page;
 
@@ -1640,7 +1641,7 @@ static vm_fault_t ceph_filemap_fault(struct vm_fault *vmf)
 			ret = VM_FAULT_OOM;
 			goto out_inline;
 		}
-		err = __ceph_do_getattr(inode, page,
+		err = __ceph_do_getattr(idmap, inode, page,
 					 CEPH_STAT_CAP_INLINE_DATA, true);
 		if (err < 0 || off >= i_size_read(inode)) {
 			unlock_page(page);

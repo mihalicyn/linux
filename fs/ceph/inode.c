@@ -2292,7 +2292,8 @@ static const struct inode_operations ceph_encrypted_symlink_iops = {
  * We don't support a PAGE_SIZE that is smaller than the
  * CEPH_FSCRYPT_BLOCK_SIZE.
  */
-static int fill_fscrypt_truncate(struct inode *inode,
+static int fill_fscrypt_truncate(struct mnt_idmap *idmap,
+				 struct inode *inode,
 				 struct ceph_mds_request *req,
 				 struct iattr *attr)
 {
@@ -2311,7 +2312,7 @@ static int fill_fscrypt_truncate(struct inode *inode,
 	int got, ret, issued;
 	u64 objver;
 
-	ret = __ceph_get_caps(inode, NULL, CEPH_CAP_FILE_RD, 0, -1, &got);
+	ret = __ceph_get_caps(idmap, inode, NULL, CEPH_CAP_FILE_RD, 0, -1, &got);
 	if (ret < 0)
 		return ret;
 
@@ -2706,7 +2707,7 @@ retry:
 		req->r_num_caps = 1;
 		req->r_stamp = attr->ia_ctime;
 		if (fill_fscrypt) {
-			err = fill_fscrypt_truncate(inode, req, attr);
+			err = fill_fscrypt_truncate(idmap, inode, req, attr);
 			if (err)
 				goto out;
 		}
@@ -2814,7 +2815,8 @@ int ceph_try_to_choose_auth_mds(struct inode *inode, int mask)
  * Verify that we have a lease on the given mask.  If not,
  * do a getattr against an mds.
  */
-int __ceph_do_getattr(struct inode *inode, struct page *locked_page,
+int __ceph_do_getattr(struct mnt_idmap *idmap, struct inode *inode,
+		      struct page *locked_page,
 		      int mask, bool force)
 {
 	struct ceph_fs_client *fsc = ceph_sb_to_client(inode->i_sb);
@@ -2839,6 +2841,7 @@ int __ceph_do_getattr(struct inode *inode, struct page *locked_page,
 		return PTR_ERR(req);
 	req->r_inode = inode;
 	ihold(inode);
+	req->r_mnt_idmap = mnt_idmap_get(idmap);
 	req->r_num_caps = 1;
 	req->r_args.getattr.mask = cpu_to_le32(mask);
 	req->r_locked_page = locked_page;
@@ -2925,7 +2928,7 @@ int ceph_permission(struct mnt_idmap *idmap, struct inode *inode,
 	if (mask & MAY_NOT_BLOCK)
 		return -ECHILD;
 
-	err = ceph_do_getattr(inode, CEPH_CAP_AUTH_SHARED, false);
+	err = ceph_do_getattr(idmap, inode, CEPH_CAP_AUTH_SHARED, false);
 
 	if (!err)
 		err = generic_permission(idmap, inode, mask);
@@ -2978,7 +2981,7 @@ int ceph_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 	/* Skip the getattr altogether if we're asked not to sync */
 	if ((flags & AT_STATX_SYNC_TYPE) != AT_STATX_DONT_SYNC) {
-		err = ceph_do_getattr(inode,
+		err = ceph_do_getattr(idmap, inode,
 				statx_to_caps(request_mask, inode->i_mode),
 				flags & AT_STATX_FORCE_SYNC);
 		if (err)

@@ -2009,6 +2009,7 @@ static ssize_t ceph_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	size_t len = iov_iter_count(to);
 	struct inode *inode = file_inode(filp);
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct mnt_idmap *idmap = file_mnt_idmap(filp);
 	bool direct_lock = iocb->ki_flags & IOCB_DIRECT;
 	ssize_t ret;
 	int want = 0, got = 0;
@@ -2091,7 +2092,7 @@ again:
 				return -ENOMEM;
 		}
 
-		statret = __ceph_do_getattr(inode, page,
+		statret = __ceph_do_getattr(idmap, inode, page,
 					    CEPH_STAT_CAP_INLINE_DATA, !!page);
 		if (statret < 0) {
 			if (page)
@@ -2166,6 +2167,7 @@ static ssize_t ceph_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = file_inode(file);
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_fs_client *fsc = ceph_inode_to_client(inode);
+	struct mnt_idmap *idmap = file_mnt_idmap(file);
 	struct ceph_osd_client *osdc = &fsc->client->osdc;
 	struct ceph_cap_flush *prealloc_cf;
 	ssize_t count, written = 0;
@@ -2199,7 +2201,7 @@ retry_snap:
 	current->backing_dev_info = inode_to_bdi(inode);
 
 	if (iocb->ki_flags & IOCB_APPEND) {
-		err = ceph_do_getattr(inode, CEPH_STAT_CAP_SIZE, false);
+		err = ceph_do_getattr(idmap, inode, CEPH_STAT_CAP_SIZE, false);
 		if (err < 0)
 			goto out;
 	}
@@ -2355,9 +2357,10 @@ static loff_t ceph_llseek(struct file *file, loff_t offset, int whence)
 {
 	if (whence == SEEK_END || whence == SEEK_DATA || whence == SEEK_HOLE) {
 		struct inode *inode = file_inode(file);
+		struct mnt_idmap *idmap = file_mnt_idmap(file);
 		int ret;
 
-		ret = ceph_do_getattr(inode, CEPH_STAT_CAP_SIZE, false);
+		ret = ceph_do_getattr(idmap, inode, CEPH_STAT_CAP_SIZE, false);
 		if (ret < 0)
 			return ret;
 	}
