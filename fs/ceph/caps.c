@@ -2979,7 +2979,7 @@ int ceph_get_caps(struct file *filp, int need, int want, loff_t endoff, int *got
 			}
 			if (ret == -EUCLEAN) {
 				/* session was killed, try renew caps */
-				ret = ceph_renew_caps(inode, flags);
+				ret = ceph_renew_caps(idmap, inode, flags);
 				if (ret == 0)
 					continue;
 			}
