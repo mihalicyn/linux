@@ -481,6 +481,8 @@ struct ceph_netfs_request_data {
 
 	/* Set it if fadvise disables file readahead entirely */
 	bool file_ra_disabled;
+
+	struct mnt_idmap *mnt_idmap;
 };
 
 static inline struct ceph_inode_info *

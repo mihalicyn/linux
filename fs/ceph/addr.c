@@ -291,6 +291,8 @@ static bool ceph_netfs_issue_op_inline(struct netfs_io_subrequest *subreq)
 {
 	struct netfs_io_request *rreq = subreq->rreq;
 	struct inode *inode = rreq->inode;
+	struct ceph_netfs_request_data *priv = rreq->netfs_priv;
+	struct mnt_idmap *idmap = priv->mnt_idmap;
 	struct ceph_mds_reply_info_parsed *rinfo;
 	struct ceph_mds_reply_info_in *iinfo;
 	struct ceph_mds_request *req;
@@ -317,6 +319,8 @@ static bool ceph_netfs_issue_op_inline(struct netfs_io_subrequest *subreq)
 	req->r_ino1 = ci->i_vino;
 	req->r_args.getattr.mask = cpu_to_le32(CEPH_STAT_CAP_INLINE_DATA);
 	req->r_num_caps = 2;
+
+	req->r_mnt_idmap = mnt_idmap_get(idmap);
 
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err < 0)
@@ -443,12 +447,17 @@ static int ceph_init_request(struct netfs_io_request *rreq, struct file *file)
 	if (!priv)
 		return -ENOMEM;
 
+	priv->mnt_idmap = &nop_mnt_idmap;
+
 	if (file) {
 		struct ceph_rw_context *rw_ctx;
 		struct ceph_file_info *fi = file->private_data;
+		struct mnt_idmap *idmap = file_mnt_idmap(file);
 
 		priv->file_ra_pages = file->f_ra.ra_pages;
 		priv->file_ra_disabled = file->f_mode & FMODE_RANDOM;
+
+		priv->mnt_idmap = mnt_idmap_get(idmap);
 
 		rw_ctx = ceph_find_rw_context(fi);
 		if (rw_ctx) {
@@ -496,6 +505,9 @@ static void ceph_netfs_free_request(struct netfs_io_request *rreq)
 
 	if (priv->caps)
 		ceph_put_cap_refs(ceph_inode(rreq->inode), priv->caps);
+
+	mnt_idmap_put(priv->mnt_idmap);
+
 	kfree(priv);
 	rreq->netfs_priv = NULL;
 }
