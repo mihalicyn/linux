@@ -1477,7 +1477,7 @@ nomem:
 static bool __inc_stopping_blocker(struct ceph_mds_client *mdsc)
 {
 	spin_lock(&mdsc->stopping_lock);
-	if (mdsc->stopping >= CEPH_MDSC_STOPPING_FLUSHED) {
+	if (mdsc->stopping >= CEPH_MDSC_STOPPING_FLUSHING) {
 		spin_unlock(&mdsc->stopping_lock);
 		return false;
 	}
@@ -1490,7 +1490,7 @@ static void __dec_stopping_blocker(struct ceph_mds_client *mdsc)
 {
 	spin_lock(&mdsc->stopping_lock);
 	if (!atomic_dec_return(&mdsc->stopping_blockers) &&
-	    mdsc->stopping >= CEPH_MDSC_STOPPING_FLUSHED)
+	    mdsc->stopping >= CEPH_MDSC_STOPPING_FLUSHING)
 		complete_all(&mdsc->stopping_waiter);
 	spin_unlock(&mdsc->stopping_lock);
 }
@@ -1551,7 +1551,7 @@ static void ceph_kill_sb(struct super_block *s)
 	sync_filesystem(s);
 
 	spin_lock(&mdsc->stopping_lock);
-	mdsc->stopping = CEPH_MDSC_STOPPING_FLUSHED;
+	mdsc->stopping = CEPH_MDSC_STOPPING_FLUSHING;
 	wait = !!atomic_read(&mdsc->stopping_blockers);
 	spin_unlock(&mdsc->stopping_lock);
 
@@ -1565,6 +1565,7 @@ static void ceph_kill_sb(struct super_block *s)
 			pr_warn_client(cl, "umount was killed, %ld\n", timeleft);
 	}
 
+	mdsc->stopping = CEPH_MDSC_STOPPING_FLUSHED;
 	kill_anon_super(s);
 
 	fsc->client->extra_mon_dispatch = NULL;

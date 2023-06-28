@@ -5192,7 +5192,7 @@ static void delayed_work(struct work_struct *work)
 
 	doutc(mdsc->fsc->client, "mdsc delayed_work\n");
 
-	if (mdsc->stopping)
+	if (mdsc->stopping >= CEPH_MDSC_STOPPING_FLUSHED)
 		return;
 
 	mutex_lock(&mdsc->mutex);
