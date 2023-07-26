@@ -357,6 +357,11 @@ enum {
 	CEPH_MDS_OP_RENAMESNAP = 0x01403,
 };
 
+#define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \
+				     op == CEPH_MDS_OP_MKNOD      || \
+				     op == CEPH_MDS_OP_MKDIR      || \
+				     op == CEPH_MDS_OP_SYMLINK)
+
 extern const char *ceph_mds_op_name(int op);
 
 

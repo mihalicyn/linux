@@ -2628,6 +2628,18 @@ static struct ceph_msg *create_request_message(struct ceph_mds_session *session,
 
 	msg->hdr.tid = cpu_to_le64(req->r_tid);
 
+	if ((req->r_mnt_idmap != &nop_mnt_idmap) &&
+	    !test_bit(CEPHFS_FEATURE_HAS_OWNER_UIDGID, &session->s_features)) {
+		WARN_ON_ONCE(!IS_CEPH_MDS_OP_NEWINODE(req->r_op));
+
+		pr_err_ratelimited(
+			"idmapped mount is used and CEPHFS_FEATURE_HAS_OWNER_UIDGID"
+			" is not supported by MDS. Fail request with -EIO.\n");
+
+		ret = -EIO;
+		goto out_free2;
+	}
+
 	/*
 	 * The old ceph_mds_request_head didn't contain a version field, and
 	 * one was added when we moved the message version from 3->4.
