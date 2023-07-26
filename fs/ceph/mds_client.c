@@ -2923,6 +2923,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_session *session,
 {
 	int mds = session->s_mds;
 	struct ceph_mds_client *mdsc = session->s_mdsc;
+	struct ceph_client *cl = mdsc->fsc->client;
 	struct ceph_msg *msg;
 	struct ceph_mds_request_head_legacy *lhead;
 	const char *path1 = NULL;
@@ -3028,6 +3029,16 @@ static struct ceph_msg *create_request_message(struct ceph_mds_session *session,
 	lhead = find_legacy_request_head(msg->front.iov_base,
 					 session->s_con.peer_features);
 
+	if ((req->r_mnt_idmap != &nop_mnt_idmap) &&
+	    !test_bit(CEPHFS_FEATURE_HAS_OWNER_UIDGID, &session->s_features)) {
+		pr_err_ratelimited_client(cl,
+			"idmapped mount is used and CEPHFS_FEATURE_HAS_OWNER_UIDGID"
+			" is not supported by MDS. Fail request with -EIO.\n");
+
+		ret = -EIO;
+		goto out_err;
+	}
+
 	/*
 	 * The ceph_mds_request_head_legacy didn't contain a version field, and
 	 * one was added when we moved the message version from 3->4.
@@ -3043,10 +3054,19 @@ static struct ceph_msg *create_request_message(struct ceph_mds_session *session,
 		p = msg->front.iov_base + sizeof(*ohead);
 	} else {
 		struct ceph_mds_request_head *nhead = msg->front.iov_base;
+		kuid_t owner_fsuid;
+		kgid_t owner_fsgid;
 
 		msg->hdr.version = cpu_to_le16(6);
 		nhead->version = cpu_to_le16(CEPH_MDS_REQUEST_HEAD_VERSION);
 		p = msg->front.iov_base + sizeof(*nhead);
+
+		owner_fsuid = from_vfsuid(req->r_mnt_idmap, &init_user_ns,
+					  VFSUIDT_INIT(req->r_cred->fsuid));
+		owner_fsgid = from_vfsgid(req->r_mnt_idmap, &init_user_ns,
+					  VFSGIDT_INIT(req->r_cred->fsgid));
+		nhead->owner_uid = cpu_to_le32(from_kuid(&init_user_ns, owner_fsuid));
+		nhead->owner_gid = cpu_to_le32(from_kgid(&init_user_ns, owner_fsgid));
 	}
 
 	end = msg->front.iov_base + msg->front.iov_len;
