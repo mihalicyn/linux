@@ -23,6 +23,8 @@
 #include <trace/events/writeback.h>
 #include "internal.h"
 
+#include "mount.h"
+
 /*
  * Inode locking rules:
  *
@@ -1976,8 +1978,23 @@ bool atime_needs_update(const struct path *path, struct inode *inode)
 	/* Atime updates will likely cause i_uid and i_gid to be written
 	 * back improprely if their true value is unknown to the vfs.
 	 */
-	if (HAS_UNMAPPED_ID(mnt_idmap(mnt), inode))
-		return false;
+	if (HAS_UNMAPPED_ID(mnt_idmap(mnt), inode)) {
+		char *p, *pathname;
+
+		/* We will allow 11 spaces for ' (deleted)' to be appended */
+		pathname = kmalloc(PATH_MAX+11, GFP_ATOMIC);
+		BUG_ON(!pathname);
+
+		p = d_path(path, pathname, PATH_MAX+11);
+		BUG_ON(IS_ERR(p));
+
+		
+		printk("atime_needs_update failure mnt_id: %u path: %s\n", real_mount(path->mnt)->mnt_id, p);
+
+		kfree(pathname);
+		//return false;
+		return true;
+	}
 
 	if (IS_NOATIME(inode))
 		return false;
