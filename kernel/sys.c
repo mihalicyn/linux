@@ -158,6 +158,9 @@ int overflowgid = DEFAULT_OVERFLOWGID;
 EXPORT_SYMBOL(overflowuid);
 EXPORT_SYMBOL(overflowgid);
 
+int isol_debug = 0;
+EXPORT_SYMBOL(isol_debug);
+
 /*
  * the same as above, but for filesystems which can only store a 16-bit
  * UID and GID. as such, this is needed on all architectures

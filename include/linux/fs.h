@@ -44,6 +44,8 @@
 #include <linux/mnt_idmapping.h>
 #include <linux/slab.h>
 
+#include <linux/user_namespace.h>
+
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
 
@@ -1346,6 +1348,7 @@ static inline gid_t i_gid_read(const struct inode *inode)
 static inline void i_uid_write(struct inode *inode, uid_t uid)
 {
 	inode->i_uid = make_kuid(i_user_ns(inode), uid);
+	WARN_ON_ONCE(inode->i_uid.uns_id);
 }
 
 static inline void i_gid_write(struct inode *inode, gid_t gid)
@@ -1364,6 +1367,21 @@ static inline void i_gid_write(struct inode *inode, gid_t gid)
 static inline vfsuid_t i_uid_into_vfsuid(struct mnt_idmap *idmap,
 					 const struct inode *inode)
 {
+	struct user_namespace *ns = NULL;
+
+	if (inode->i_uid.uns_id) {
+		ns = get_userns_by_id(inode->i_uid.uns_id);
+		BUG_ON(!ns);
+		printk("%s isolated uid? ns isolated: %ld idmapped?: %d ino:%lx sdev:%u:%u\n", __func__, (ns->flags & USERNS_ISOLATED), (idmap != &nop_mnt_idmap), inode->i_ino, MAJOR(inode->i_sb->s_dev), MINOR(inode->i_sb->s_dev));
+	}
+
+	if (ns && (ns->flags & USERNS_ISOLATED) && (idmap != &nop_mnt_idmap)) {
+		printk(__func__);
+		dump_stack();
+
+		printk("%s 2 isolated uid? ino:%lx sdev:%u:%u\n", __func__, inode->i_ino, MAJOR(inode->i_sb->s_dev), MINOR(inode->i_sb->s_dev));
+
+	}
 	return make_vfsuid(idmap, i_user_ns(inode), inode->i_uid);
 }
 
@@ -1504,11 +1522,14 @@ static inline bool fsuidgid_has_mapping(struct super_block *sb,
 	kgid_t kgid;
 
 	kuid = mapped_fsuid(idmap, fs_userns);
-	if (!uid_valid(kuid))
+	if (!uid_valid(kuid)) {
+		if (isol_debug) printk("fsuidgid_has_mapping failed at uid_valid\n");
 		return false;
+	}
 	kgid = mapped_fsgid(idmap, fs_userns);
 	if (!gid_valid(kgid))
 		return false;
+if (isol_debug && kuid.uns_id) printk("fsuidgid_has_mapping kuid ns %px fs ns: %px uid: %u nsuid: %u mapping: %d\n", get_userns_by_id(kuid.uns_id), fs_userns, kuid.uid_val, kuid.uns_id, from_kuid(fs_userns, kuid));
 	return kuid_has_mapping(fs_userns, kuid) &&
 	       kgid_has_mapping(fs_userns, kgid);
 }
@@ -2170,8 +2191,11 @@ static inline bool sb_rdonly(const struct super_block *sb) { return sb->s_flags 
 static inline bool HAS_UNMAPPED_ID(struct mnt_idmap *idmap,
 				   struct inode *inode)
 {
-	return !vfsuid_valid(i_uid_into_vfsuid(idmap, inode)) ||
+	bool ret = !vfsuid_valid(i_uid_into_vfsuid(idmap, inode)) ||
 	       !vfsgid_valid(i_gid_into_vfsgid(idmap, inode));
+	if (ret)
+		printk("HAS_UNMAPPED_ID failure. idmapped: %d\n", idmap != &nop_mnt_idmap); //alex
+	return ret;
 }
 
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)

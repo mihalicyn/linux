@@ -110,6 +110,7 @@ static inline bool vfsgid_eq(vfsgid_t left, vfsgid_t right)
  */
 static inline bool vfsuid_eq_kuid(vfsuid_t vfsuid, kuid_t kuid)
 {
+	if (isol_debug && (vfsuid.uns_id || kuid.uns_id)) printk("vfsuid_eq_kuid\n");
 	return vfsuid_valid(vfsuid) && __vfsuid_val(vfsuid) == __kuid_val(kuid);
 }
 
@@ -197,6 +198,9 @@ static inline bool vfsuid_has_mapping(struct user_namespace *userns,
  */
 static inline kuid_t vfsuid_into_kuid(vfsuid_t vfsuid)
 {
+	WARN_ON_ONCE(AS_KUIDT(vfsuid).uns_id);
+	if (AS_KUIDT(vfsuid).uns_id)
+		printk("vfsuid_into_kuid uid: %d\n", vfsuid.uid_val);
 	return AS_KUIDT(vfsuid);
 }
 
@@ -254,6 +258,7 @@ static inline kgid_t vfsgid_into_kgid(vfsgid_t vfsgid)
 static inline kuid_t mapped_fsuid(struct mnt_idmap *idmap,
 				  struct user_namespace *fs_userns)
 {
+	if (isol_debug) printk("mapped_fsuid idmap ns %px fs ns: %px current ns %px\n", NULL, fs_userns, current_user_ns());
 	return from_vfsuid(idmap, fs_userns, VFSUIDT_INIT(current_fsuid()));
 }
 

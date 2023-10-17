@@ -105,12 +105,15 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 		ns = get_userns_by_id(kuid.uns_id);
 		BUG_ON(!ns);
 		BUG_ON(!(ns->flags & USERNS_ISOLATED));
+		printk("make_vfsuid isolated idmap ns: %px ns: %px init: %px isol %d?? uid: %d\n", mnt_userns, ns, &init_user_ns, !!(ns->flags & USERNS_ISOLATED), kuid.uid_val);
+
 
 		if ((no_idmapping(mnt_userns, fs_userns) && fs_userns == ns) ||
 		    (initial_idmapping(fs_userns) && mnt_userns == ns)) {
 			uid_t isolated_uid;
 
 			isolated_uid = __kuid_uid(kuid);
+			if (isol_debug) printk("make_vfsuid isolated %u\n", isolated_uid);
 
 			return VFSUIDT_INIT(KUIDT_INIT(0, isolated_uid));
 		}
@@ -193,11 +196,13 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 
 	/* case of procfs inside the container with isolated user namespace */
 	if (vfsuid.uns_id && no_idmapping(mnt_userns, fs_userns) && (fs_userns->flags & USERNS_ISOLATED) && (fs_userns->id == vfsuid.uns_id)) {
+		printk("from_vfsuid #1 uid: %d\n", vfsuid.uid_val);
 		return KUIDT_INIT(0, vfsuid.uid_val);
 	}
 
 	/* case of host filesystem bindmount to the container with container's (isolated) user namespace idmapping applied */
 	if (vfsuid.uns_id && initial_idmapping(fs_userns) && (mnt_userns->flags & USERNS_ISOLATED) && (mnt_userns->id == vfsuid.uns_id)) {
+		printk("from_vfsuid #2 uid: %d\n", vfsuid.uid_val);
 		return KUIDT_INIT(0, vfsuid.uid_val);
 	}
 

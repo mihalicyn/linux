@@ -63,7 +63,19 @@ static inline uid_t __kuid_uid(kuid_t uid)
 
 static inline uid_t __kuid_host_uid(kuid_t uid)
 {
-	WARN_ON_ONCE(uid.uns_id);
+	if (uid.uns_id) {
+		struct user_namespace *ns;
+
+		//WARN_ON_ONCE(uid.uns_id);
+
+		ns = get_userns_by_id(uid.uns_id);
+		BUG_ON(!ns);
+
+		printk("uns ID: %u isolated userns: %px\n", uid.uns_id, ns);
+		dump_stack();
+
+		return (uid_t)-1;
+	}
 	return uid.uid_val;
 }
 
