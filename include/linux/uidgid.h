@@ -17,6 +17,12 @@
 
 #include <linux/bug.h>
 
+#ifdef CONFIG_USER_NS
+
+extern struct user_namespace *get_userns_by_id(u32 id);
+
+#endif
+
 struct user_namespace;
 extern struct user_namespace init_user_ns;
 struct uid_gid_map;

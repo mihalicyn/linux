@@ -24,6 +24,7 @@
 
 static struct kmem_cache *user_ns_cachep __ro_after_init;
 static DEFINE_MUTEX(userns_state_mutex);
+static DEFINE_XARRAY_FLAGS(user_ns_xa, XA_FLAGS_ALLOC1);
 
 static bool new_idmap_permitted(const struct file *file,
 				struct user_namespace *ns, int cap_setid,
@@ -69,13 +70,6 @@ static unsigned long enforced_nproc_rlimit(void)
 		limit = rlimit(RLIMIT_NPROC);
 
 	return limit;
-}
-
-static atomic_long_t last_userns_id;
-
-unsigned long get_userns_id(void)
-{
-	return atomic_long_inc_return(&last_userns_id);
 }
 
 /*
@@ -136,11 +130,15 @@ int create_user_ns(struct cred *new)
 		goto fail_free;
 	ns->ns.ops = &userns_operations;
 
+	ret = xa_insert(&user_ns_xa, ns->ns.inum, ns, GFP_KERNEL);
+	if (ret)
+		goto fail_free_inum;
+	ns->id = ns->ns.inum;
+
 	refcount_set(&ns->ns.count, 1);
 	/* Leave the new->user_ns reference with the new user namespace. */
 	ns->parent = parent_ns;
 	ns->level = parent_ns->level + 1;
-	ns->id = get_userns_id();
 	ns->owner = owner;
 	ns->group = group;
 	INIT_WORK(&ns->work, free_user_ns);
@@ -172,6 +170,8 @@ fail_keyring:
 #ifdef CONFIG_PERSISTENT_KEYRINGS
 	key_put(ns->persistent_keyring_register);
 #endif
+	xa_erase(&user_ns_xa, ns->id);
+fail_free_inum:
 	ns_free_inum(&ns->ns);
 fail_free:
 	kmem_cache_free(user_ns_cachep, ns);
@@ -179,6 +179,11 @@ fail_dec:
 	dec_user_namespaces(ucounts);
 fail:
 	return ret;
+}
+
+struct user_namespace *get_userns_by_id(u32 id)
+{
+	return xa_load(&user_ns_xa, id);
 }
 
 int unshare_userns(unsigned long unshare_flags, struct cred **new_cred)
@@ -227,6 +232,8 @@ static void free_user_ns(struct work_struct *work)
 		retire_userns_sysctls(ns);
 		key_free_user_ns(ns);
 		ns_free_inum(&ns->ns);
+		xa_erase(&user_ns_xa, ns->id);
+		synchronize_rcu();
 		kmem_cache_free(user_ns_cachep, ns);
 		dec_user_namespaces(ucounts);
 		ns = parent;
