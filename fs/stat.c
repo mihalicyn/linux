@@ -54,6 +54,8 @@ void generic_fillattr(struct mnt_idmap *idmap, u32 request_mask,
 	stat->mode = inode->i_mode;
 	stat->nlink = inode->i_nlink;
 	stat->uid = vfsuid_into_kuid(vfsuid);
+	if (stat->uid.uns_id)
+		printk("generic_fillattr uid: %d ino:%lx sdev:%u:%u\n", stat->uid.uid_val, stat->ino, MAJOR(stat->dev), MINOR(stat->dev));
 	stat->gid = vfsgid_into_kgid(vfsgid);
 	stat->rdev = inode->i_rdev;
 	stat->size = i_size_read(inode);

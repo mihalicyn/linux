@@ -84,6 +84,8 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 	u32 down_uid;
 	u32 res_uid;
 
+	struct user_namespace *ns = NULL;
+
 	if (idmap == &nop_mnt_idmap)
 		return VFSUIDT_INIT(kuid);
 	if (initial_idmapping(fs_userns))
@@ -105,8 +107,13 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 	 * See also make_kuid() function.
 	 */
 	if (mnt_userns_id && (down_uid == (u32) -1)) {
+		ns = get_userns_by_id(mnt_userns_id);
+		BUG_ON(!ns);
+		BUG_ON(!(ns->flags & USERNS_ISOLATED));
+
 		isolated = true;
 		res_uid = uid;
+		if (isol_debug) printk("make_vfsuid isolated #2 ns id: %d uid: %u\n", mnt_userns_id, res_uid);
 	} else {
 		res_uid = down_uid;
 	}
@@ -183,6 +190,15 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 {
 	uid_t uid;
 
+	if (isol_debug > 1) {
+		printk("from_vfsuid entry idmap nsid %u fs ns: %px current ns %px idmap_nop? %d fs_userns isol? %d vfsuid nsid %u fs userns id %u\n",
+		idmap->userns_id, fs_userns, current_user_ns(),
+		idmap == &nop_mnt_idmap,
+		(fs_userns->flags & USERNS_ISOLATED),
+		vfsuid.uns_id,
+		fs_userns->id);
+	}
+
 	if (idmap == &nop_mnt_idmap)
 		return AS_KUIDT(vfsuid);
 
@@ -209,10 +225,12 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 		if (initial_idmapping(fs_userns) &&
 		    idmap->userns_id &&
 		    (idmap->userns_id == vfsuid.uns_id)) {
+			printk("from_vfsuid #2 uid: %d\n", vfsuid.uid_val);
 			return KUIDT_INIT(0, vfsuid.uid_val);
 		}
 
 		/* we can't perform remapping */
+		printk("from_vfsuid #3 uid: %d returning INVALID_UID\n", vfsuid.uid_val);
 		return INVALID_UID;
 	}
 

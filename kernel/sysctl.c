@@ -1787,6 +1787,13 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_MAXOLDUID,
 	},
 	{
+		.procname	= "isol_debug",
+		.data		= &isol_debug,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler	= proc_dointvec,
+	},
+	{
 		.procname	= "overflowgid",
 		.data		= &overflowgid,
 		.maxlen		= sizeof(int),

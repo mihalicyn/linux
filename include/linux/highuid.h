@@ -35,6 +35,8 @@
 extern int overflowuid;
 extern int overflowgid;
 
+extern int isol_debug;
+
 extern void __bad_uid(void);
 extern void __bad_gid(void);
 

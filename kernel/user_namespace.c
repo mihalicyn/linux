@@ -1506,6 +1506,7 @@ ssize_t proc_isolated_uns_write(struct file *file, const char __user *buf,
 	mutex_lock(&userns_state_mutex);
 	if (isolated) {
 		ns->flags |= USERNS_ISOLATED;
+		printk("userns was made isolated: %px\n", ns);
 	} else {
 		if (ns->flags & USERNS_ISOLATED)
 			goto out_unlock;
