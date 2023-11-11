@@ -190,6 +190,10 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	seq_put_decimal_ull(m, "\t", from_kuid_munged(user_ns, cred->euid));
 	seq_put_decimal_ull(m, "\t", from_kuid_munged(user_ns, cred->suid));
 	seq_put_decimal_ull(m, "\t", from_kuid_munged(user_ns, cred->fsuid));
+	seq_put_decimal_ull(m, "\nIsolatedUid:\t", from_kuid_isolated(user_ns, cred->uid));
+	seq_put_decimal_ull(m, "\t", from_kuid_isolated(user_ns, cred->euid));
+	seq_put_decimal_ull(m, "\t", from_kuid_isolated(user_ns, cred->suid));
+	seq_put_decimal_ull(m, "\t", from_kuid_isolated(user_ns, cred->fsuid));
 	seq_put_decimal_ull(m, "\nGid:\t", from_kgid_munged(user_ns, cred->gid));
 	seq_put_decimal_ull(m, "\t", from_kgid_munged(user_ns, cred->egid));
 	seq_put_decimal_ull(m, "\t", from_kgid_munged(user_ns, cred->sgid));
