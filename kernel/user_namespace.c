@@ -470,6 +470,34 @@ uid_t from_kuid(struct user_namespace *targ, kuid_t kuid)
 }
 EXPORT_SYMBOL(from_kuid);
 
+uid_t kuid_ns_owner(struct user_namespace *targ, kuid_t kuid)
+{
+	uid_t uid;
+	struct user_namespace *user_ns;
+
+	BUG_ON(!kuid.uns_id);
+
+	rcu_read_lock();
+
+	user_ns = get_userns_by_id(kuid.uns_id);
+	BUG_ON(!user_ns);
+	BUG_ON(!(user_ns->flags & USERNS_ISOLATED));
+
+	if (!refcount_inc_not_zero(&user_ns->ns.count)) {
+		rcu_read_unlock();
+		uid = overflowuid;
+		goto out;
+	}
+
+	rcu_read_unlock();
+
+	uid = from_kuid_munged(targ, user_ns->owner);
+
+	put_user_ns(user_ns);
+out:
+	return uid;
+}
+
 /**
  *	from_kuid_munged - Create a uid from a kuid user-namespace pair.
  *	@targ: The user namespace we want a uid in.
@@ -493,11 +521,37 @@ uid_t from_kuid_munged(struct user_namespace *targ, kuid_t kuid)
 	uid_t uid;
 	uid = from_kuid(targ, kuid);
 
-	if (uid == (uid_t) -1)
-		uid = overflowuid;
+	if (uid == (uid_t) -1) {
+		if (!kuid.uns_id)
+			uid = overflowuid;
+		else
+			uid = kuid_ns_owner(targ, kuid);
+	}
+
 	return uid;
 }
 EXPORT_SYMBOL(from_kuid_munged);
+
+uid_t from_kuid_isolated(struct user_namespace *targ, kuid_t kuid)
+{
+	uid_t res_uid;
+
+	if (!kuid.uns_id) {
+		/* Map the uid from a global kernel uid */
+		res_uid = map_id_up(&targ->uid_map, __kuid_uid(kuid));
+	} else if (((targ->flags & USERNS_ISOLATED) && (targ->id == kuid.uns_id)) ||
+		   targ == &init_user_ns) {
+		res_uid = __kuid_uid(kuid);
+	} else {
+		res_uid = (uid_t)-1;
+	}
+
+	if (res_uid == (uid_t) -1)
+		res_uid = overflowuid;
+
+	return res_uid;
+}
+EXPORT_SYMBOL(from_kuid_isolated);
 
 /**
  *	make_kgid - Map a user-namespace gid pair into a kgid.
