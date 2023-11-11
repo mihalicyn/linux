@@ -198,6 +198,10 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	seq_put_decimal_ull(m, "\t", from_kgid_munged(user_ns, cred->egid));
 	seq_put_decimal_ull(m, "\t", from_kgid_munged(user_ns, cred->sgid));
 	seq_put_decimal_ull(m, "\t", from_kgid_munged(user_ns, cred->fsgid));
+	seq_put_decimal_ull(m, "\nIsolatedGid:\t", from_kgid_isolated(user_ns, cred->gid));
+	seq_put_decimal_ull(m, "\t", from_kgid_isolated(user_ns, cred->egid));
+	seq_put_decimal_ull(m, "\t", from_kgid_isolated(user_ns, cred->sgid));
+	seq_put_decimal_ull(m, "\t", from_kgid_isolated(user_ns, cred->fsgid));
 	seq_put_decimal_ull(m, "\nFDSize:\t", max_fds);
 
 	seq_puts(m, "\nGroups:\t");
