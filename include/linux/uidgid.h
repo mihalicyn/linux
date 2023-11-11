@@ -180,6 +180,7 @@ extern gid_t from_kgid(struct user_namespace *to, kgid_t gid);
 extern uid_t from_kuid_munged(struct user_namespace *to, kuid_t uid);
 extern gid_t from_kgid_munged(struct user_namespace *to, kgid_t gid);
 extern uid_t from_kuid_isolated(struct user_namespace *to, kuid_t uid);
+extern gid_t from_kgid_isolated(struct user_namespace *to, kgid_t gid);
 
 static inline bool kuid_has_mapping(struct user_namespace *ns, kuid_t uid)
 {
@@ -238,6 +239,14 @@ static inline uid_t from_kuid_isolated(struct user_namespace *to, kuid_t kuid)
 	if (uid == (uid_t)-1)
 		uid = overflowuid;
 	return uid;
+}
+
+static inline gid_t from_kgid_isolated(struct user_namespace *to, kgid_t kgid)
+{
+	gid_t gid = from_kgid(to, kgid);
+	if (gid == (gid_t)-1)
+		gid = overflowgid;
+	return gid;
 }
 
 static inline bool kuid_has_mapping(struct user_namespace *ns, kuid_t uid)
