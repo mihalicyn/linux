@@ -613,6 +613,34 @@ gid_t from_kgid(struct user_namespace *targ, kgid_t kgid)
 }
 EXPORT_SYMBOL(from_kgid);
 
+gid_t kgid_ns_owner(struct user_namespace *targ, kgid_t kgid)
+{
+	gid_t gid;
+	struct user_namespace *user_ns;
+
+	BUG_ON(!kgid.uns_id);
+
+	rcu_read_lock();
+
+	user_ns = get_userns_by_id(kgid.uns_id);
+	BUG_ON(!user_ns);
+	BUG_ON(!(user_ns->flags & USERNS_ISOLATED));
+
+	if (!refcount_inc_not_zero(&user_ns->ns.count)) {
+		rcu_read_unlock();
+		gid = overflowgid;
+		goto out;
+	}
+
+	rcu_read_unlock();
+
+	gid = from_kgid_munged(targ, user_ns->group);
+
+	put_user_ns(user_ns);
+out:
+	return gid;
+}
+
 /**
  *	from_kgid_munged - Create a gid from a kgid user-namespace pair.
  *	@targ: The user namespace we want a gid in.
@@ -635,11 +663,37 @@ gid_t from_kgid_munged(struct user_namespace *targ, kgid_t kgid)
 	gid_t gid;
 	gid = from_kgid(targ, kgid);
 
-	if (gid == (gid_t) -1)
-		gid = overflowgid;
+	if (gid == (gid_t) -1) {
+		if (!kgid.uns_id)
+			gid = overflowgid;
+		else
+			gid = kgid_ns_owner(targ, kgid);
+	}
+
 	return gid;
 }
 EXPORT_SYMBOL(from_kgid_munged);
+
+gid_t from_kgid_isolated(struct user_namespace *targ, kgid_t kgid)
+{
+	gid_t res_gid;
+
+	if (!kgid.uns_id) {
+		/* Map the uid from a global kernel uid */
+		res_gid = map_id_up(&targ->gid_map, __kgid_gid(kgid));
+	} else if (((targ->flags & USERNS_ISOLATED) && (targ->id == kgid.uns_id)) ||
+		   targ == &init_user_ns) {
+		res_gid = __kgid_gid(kgid);
+	} else {
+		res_gid = (gid_t)-1;
+	}
+
+	if (res_gid == (gid_t) -1)
+		res_gid = overflowgid;
+
+	return res_gid;
+}
+EXPORT_SYMBOL(from_kgid_isolated);
 
 /**
  *	make_kprojid - Map a user-namespace projid pair into a kprojid.
