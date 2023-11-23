@@ -809,6 +809,9 @@ struct fuse_conn {
 	/* Add owner_{u,g}id info when creating a new inode */
 	unsigned int owner_uid_gid_ext:1;
 
+	/* Allow creation of idmapped mounts */
+	unsigned int allow_idmap:1;
+
 	/* Does the filesystem support per inode DAX? */
 	unsigned int inode_dax:1;
 
