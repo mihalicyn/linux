@@ -4300,7 +4300,8 @@ static int can_idmap_mount(const struct mount_kattr *kattr, struct mount *mnt)
 		return -EPERM;
 
 	/* The underlying filesystem doesn't support idmapped mounts yet. */
-	if (!(m->mnt_sb->s_type->fs_flags & FS_ALLOW_IDMAP))
+	if (!(m->mnt_sb->s_type->fs_flags & FS_ALLOW_IDMAP) ||
+	    (m->mnt_sb->s_type->allow_idmap && !m->mnt_sb->s_type->allow_idmap(m->mnt_sb)))
 		return -EINVAL;
 
 	/* We're not controlling the superblock. */
