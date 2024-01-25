@@ -138,7 +138,11 @@ EXPORT_SYMBOL_GPL(make_vfsuid);
 vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
 		     struct user_namespace *fs_userns, kgid_t kgid)
 {
+	bool isolated = false;
+	u32 mnt_userns_id = idmap->userns_id;
 	gid_t gid;
+	u32 down_gid;
+	u32 res_gid;
 
 	if (idmap == &nop_mnt_idmap)
 		return VFSGIDT_INIT(kgid);
@@ -148,7 +152,18 @@ vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
 		gid = from_kgid(fs_userns, kgid);
 	if (gid == (gid_t)-1)
 		return INVALID_VFSGID;
-	return VFSGIDT_INIT_RAW(map_id_down(&idmap->gid_map, gid));
+
+	down_gid = map_id_down(&idmap->gid_map, gid);
+
+	/* please, look into make_vfsuid() for the explanation */
+	if (mnt_userns_id && (down_gid == (u32) -1)) {
+		isolated = true;
+		res_gid = gid;
+	} else {
+		res_gid = down_gid;
+	}
+
+	return VFSGIDT_INIT(KGIDT_INIT(isolated ? mnt_userns_id : 0, res_gid));
 }
 EXPORT_SYMBOL_GPL(make_vfsgid);
 
@@ -228,6 +243,19 @@ kgid_t from_vfsgid(struct mnt_idmap *idmap,
 
 	if (idmap == &nop_mnt_idmap)
 		return AS_KGIDT(vfsgid);
+
+	if (gid_is_isolated(AS_KGIDT(vfsgid))) {
+		/* please, look into from_vfsuid() for the explanation */
+		if (initial_idmapping(fs_userns) &&
+		    idmap->userns_id &&
+		    (idmap->userns_id == vfsgid.uns_id)) {
+			return KGIDT_INIT(0, vfsgid.gid_val);
+		}
+
+		/* we can't perform remapping */
+		return INVALID_GID;
+	}
+
 	gid = map_id_up(&idmap->gid_map, __vfsgid_gid(vfsgid));
 	if (gid == (gid_t)-1)
 		return INVALID_GID;
