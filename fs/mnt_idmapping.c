@@ -20,6 +20,13 @@ struct mnt_idmap {
 	struct uid_gid_map uid_map;
 	struct uid_gid_map gid_map;
 	refcount_t count;
+	/*
+	 * Used only for idmapped mount attached to an isolated user namespace, aka
+	 * "isolated mount".
+	 *
+	 * MUST be zero for any other cases.
+	 */
+	u32 userns_id;
 };
 
 /*
@@ -71,7 +78,11 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 		     struct user_namespace *fs_userns,
 		     kuid_t kuid)
 {
+	bool isolated = false;
+	u32 mnt_userns_id = idmap->userns_id;
 	uid_t uid;
+	u32 down_uid;
+	u32 res_uid;
 
 	if (idmap == &nop_mnt_idmap)
 		return VFSUIDT_INIT(kuid);
@@ -81,7 +92,26 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 		uid = from_kuid(fs_userns, kuid);
 	if (uid == (uid_t)-1)
 		return INVALID_VFSUID;
-	return VFSUIDT_INIT_RAW(map_id_down(&idmap->uid_map, uid));
+
+	down_uid = map_id_down(&idmap->uid_map, uid);
+
+	/*
+	 * Ok, we have failed to map ID down in accordance with
+	 * mount's idmapping (in a classical meaning!), but if mount's idmapping was
+	 * created from an isolated user namespace (mnt_userns_id != 0),
+	 * then we can produce an "isolated" vfsuid and pass it down the VFS
+	 * internals.
+	 *
+	 * See also make_kuid() function.
+	 */
+	if (mnt_userns_id && (down_uid == (u32) -1)) {
+		isolated = true;
+		res_uid = uid;
+	} else {
+		res_uid = down_uid;
+	}
+
+	return VFSUIDT_INIT(KUIDT_INIT(isolated ? mnt_userns_id : 0, res_uid));
 }
 EXPORT_SYMBOL_GPL(make_vfsuid);
 
@@ -140,6 +170,37 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 
 	if (idmap == &nop_mnt_idmap)
 		return AS_KUIDT(vfsuid);
+
+	if (uid_is_isolated(AS_KUIDT(vfsuid))) {
+		/*
+		 * Case of host's filesystem bindmount to the container
+		 * with container's (isolated) user namespace idmapping applied.
+		 *
+		 * We have a caller vfsuid (isolated!), we know that our
+		 * mount is idmapped one (idmap != &nop_mnt_idmap).
+		 * Now we want to ensure that:
+		 * - superblock was mounted on the host (init_user_ns)
+		 * - mount's idmapping user namespace ID is the same as caller's user namespace ID.
+		 *
+		 * It these conditions are met, then we are safe to remap vfsuid from
+		 * mount's idmapping to the filesystem's idmapping.
+		 * As we have idmap->userns_id == vfsuid.uns_id satisfied AND
+		 * sb->s_user_ns == &init_user_ns this remapping is trivial
+		 * and we just need to return (0, vfsuid.uid_val) as a kuid_t value.
+		 *
+		 * Of any of these is not true, then we have to return INVALID_UID.
+		 *
+		 */
+		if (initial_idmapping(fs_userns) &&
+		    idmap->userns_id &&
+		    (idmap->userns_id == vfsuid.uns_id)) {
+			return KUIDT_INIT(0, vfsuid.uid_val);
+		}
+
+		/* we can't perform remapping */
+		return INVALID_UID;
+	}
+
 	uid = map_id_up(&idmap->uid_map, __vfsuid_uid(vfsuid));
 	if (uid == (uid_t)-1)
 		return INVALID_UID;
@@ -214,7 +275,7 @@ static int copy_mnt_idmap(struct uid_gid_map *map_from,
 	 * anything at all.
 	 */
 	if (nr_extents == 0)
-		return -EINVAL;
+		return 0;
 
 	/*
 	 * Here we know that nr_extents is greater than zero which means
@@ -281,8 +342,16 @@ struct mnt_idmap *alloc_mnt_idmap(struct user_namespace *mnt_userns)
 		ret = copy_mnt_idmap(&mnt_userns->gid_map, &idmap->gid_map);
 	if (ret) {
 		free_mnt_idmap(idmap);
-		idmap = ERR_PTR(ret);
+		return ERR_PTR(ret);
 	}
+
+	if (mnt_userns->flags & USERNS_ISOLATED) {
+		idmap->userns_id = mnt_userns->id;
+	} else if ((idmap->uid_map.nr_extents == 0) || (idmap->gid_map.nr_extents == 0)) {
+		free_mnt_idmap(idmap);
+		return ERR_PTR(-EINVAL);
+	}
+
 	return idmap;
 }
 
