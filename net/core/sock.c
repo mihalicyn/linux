@@ -1946,6 +1946,23 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		goto lenout;
 	}
 
+#ifdef CONFIG_SOCK_CGROUP_DATA
+	case SO_PEERCGROUPID:
+	{
+		const struct proto_ops *ops;
+
+		if (sk->sk_family != AF_UNIX)
+			return -EOPNOTSUPP;
+
+		ops = READ_ONCE(sock->ops);
+		if (!ops->getsockopt)
+			return -EOPNOTSUPP;
+
+		return ops->getsockopt(sock, SOL_SOCKET, optname, optval.user,
+				       optlen.user);
+	}
+#endif
+
 	/* Dubious BSD thing... Probably nobody even uses it, but
 	 * the UNIX standard wants it for whatever reason... -DaveM
 	 */

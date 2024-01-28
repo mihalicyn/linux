@@ -142,6 +142,8 @@
 
 #define SO_RCVPRIORITY		0x404D
 
+#define SO_PEERCGROUPID		0x404E
+
 #if !defined(__KERNEL__)
 
 #if __BITS_PER_LONG == 64

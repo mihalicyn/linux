@@ -901,6 +901,66 @@ static void unix_show_fdinfo(struct seq_file *m, struct socket *sock)
 #define unix_show_fdinfo NULL
 #endif
 
+static int unix_getsockopt(struct socket *sock, int level, int optname,
+			   char __user *optval, int __user *optlen)
+{
+	struct sock *sk = sock->sk;
+
+	union {
+		int val;
+		u64 val64;
+	} v;
+
+	int lv = sizeof(int);
+	int len;
+
+	if (level != SOL_SOCKET)
+		return -ENOPROTOOPT;
+
+	if (get_user(len, optlen))
+		return -EFAULT;
+
+	if (len < 0)
+		return -EINVAL;
+
+	memset(&v, 0, sizeof(v));
+
+	switch (optname) {
+#ifdef CONFIG_SOCK_CGROUP_DATA
+	case SO_PEERCGROUPID:
+	{
+		struct sock *peer;
+		u64 peer_cgroup_id = 0;
+
+		lv = sizeof(u64);
+		if (len < lv)
+			return -EINVAL;
+
+		peer = unix_peer_get(sk);
+		if (!peer)
+			return -ENODATA;
+
+		peer_cgroup_id = cgroup_id(sock_cgroup_ptr(&peer->sk_cgrp_data));
+		sock_put(peer);
+
+		v.val64 = peer_cgroup_id;
+		break;
+	}
+#endif
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	if (len > lv)
+		len = lv;
+	if (copy_to_user(optval, &v, len))
+		return -EFAULT;
+	if (put_user(len, optlen))
+		return -EFAULT;
+
+	return 0;
+}
+
 static const struct proto_ops unix_stream_ops = {
 	.family =	PF_UNIX,
 	.owner =	THIS_MODULE,
@@ -910,6 +970,7 @@ static const struct proto_ops unix_stream_ops = {
 	.socketpair =	unix_socketpair,
 	.accept =	unix_accept,
 	.getname =	unix_getname,
+	.getsockopt =	unix_getsockopt,
 	.poll =		unix_poll,
 	.ioctl =	unix_ioctl,
 #ifdef CONFIG_COMPAT
@@ -935,6 +996,7 @@ static const struct proto_ops unix_dgram_ops = {
 	.socketpair =	unix_socketpair,
 	.accept =	sock_no_accept,
 	.getname =	unix_getname,
+	.getsockopt =	unix_getsockopt,
 	.poll =		unix_dgram_poll,
 	.ioctl =	unix_ioctl,
 #ifdef CONFIG_COMPAT
@@ -959,6 +1021,7 @@ static const struct proto_ops unix_seqpacket_ops = {
 	.socketpair =	unix_socketpair,
 	.accept =	unix_accept,
 	.getname =	unix_getname,
+	.getsockopt =	unix_getsockopt,
 	.poll =		unix_dgram_poll,
 	.ioctl =	unix_ioctl,
 #ifdef CONFIG_COMPAT
