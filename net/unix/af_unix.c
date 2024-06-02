@@ -117,6 +117,7 @@
 #include <linux/file.h>
 #include <linux/btf_ids.h>
 #include <linux/bpf-cgroup.h>
+#include <linux/cgroup.h>
 
 static atomic_long_t unix_nr_socks;
 static struct hlist_head bsd_socket_buckets[UNIX_HASH_SIZE / 2];
@@ -861,6 +862,11 @@ static void unix_show_fdinfo(struct seq_file *m, struct socket *sock)
 	int nr_fds = 0;
 
 	if (sk) {
+#ifdef CONFIG_SOCK_CGROUP_DATA
+		struct sock *peer;
+		u64 sk_cgroup_id = 0;
+#endif
+
 		s_state = READ_ONCE(sk->sk_state);
 		u = unix_sk(sk);
 
@@ -874,6 +880,21 @@ static void unix_show_fdinfo(struct seq_file *m, struct socket *sock)
 			nr_fds = unix_count_nr_fds(sk);
 
 		seq_printf(m, "scm_fds: %u\n", nr_fds);
+
+#ifdef CONFIG_SOCK_CGROUP_DATA
+		sk_cgroup_id = cgroup_id(sock_cgroup_ptr(&sk->sk_cgrp_data));
+		seq_printf(m, "cgroup_id: %llu\n", sk_cgroup_id);
+
+		peer = unix_peer_get(sk);
+		if (peer) {
+			u64 peer_cgroup_id = 0;
+
+			peer_cgroup_id = cgroup_id(sock_cgroup_ptr(&peer->sk_cgrp_data));
+			sock_put(peer);
+
+			seq_printf(m, "peer_cgroup_id: %llu\n", peer_cgroup_id);
+		}
+#endif
 	}
 }
 #else
