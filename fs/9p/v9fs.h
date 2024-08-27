@@ -185,7 +185,7 @@ extern const struct inode_operations v9fs_dir_inode_operations_dotl;
 extern const struct inode_operations v9fs_file_inode_operations_dotl;
 extern const struct inode_operations v9fs_symlink_inode_operations_dotl;
 extern const struct netfs_request_ops v9fs_req_ops;
-extern struct inode *v9fs_fid_iget_dotl(struct super_block *sb,
+extern struct inode *v9fs_fid_iget_dotl(struct mnt_idmap *idmap, struct super_block *sb,
 						struct p9_fid *fid, bool new);
 
 /* other default globals */

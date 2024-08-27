@@ -847,24 +847,30 @@ reterr:
 	return ERR_PTR(safe_errno(err));
 }
 
-static struct p9_fid *p9_fid_create(struct p9_client *clnt)
+static struct p9_fid *p9_fid_create(struct mnt_idmap *idmap, struct p9_client *clnt)
 {
 	int ret;
 	struct p9_fid *fid;
 
 	p9_debug(P9_DEBUG_FID, "clnt %p\n", clnt);
-	fid = kzalloc(sizeof(*fid), GFP_KERNEL);
+	fid = kzalloc(sizeof(*fid), GFP_KERNEL);//account?
 	if (!fid)
 		return NULL;
 
 	fid->mode = -1;
-	fid->uid = current_fsuid();
+
+	/* We don't have an access to an inode or superblock, but
+	 * while 9pfs does not support FS_USERNS_MOUNT, we know
+	 * that i_user_ns(dir_inode) == &init_user_ns.
+	 */
+	fid->uid = mapped_fsuid(idmap, &init_user_ns);
+
 	fid->clnt = clnt;
 	refcount_set(&fid->count, 1);
 
 	idr_preload(GFP_KERNEL);
 	spin_lock_irq(&clnt->lock);
-	ret = idr_alloc_u32(&clnt->fids, fid, &fid->fid, P9_NOFID - 1,
+	ret = idr_alloc_u32(&clnt->fids, fid, &fid->fid, P9_NOFID - 1,//?
 			    GFP_NOWAIT);
 	spin_unlock_irq(&clnt->lock);
 	idr_preload_end();
@@ -1105,7 +1111,7 @@ struct p9_fid *p9_client_attach(struct p9_client *clnt, struct p9_fid *afid,
 
 	p9_debug(P9_DEBUG_9P, ">>> TATTACH afid %d uname %s aname %s\n",
 		 afid ? afid->fid : -1, uname, aname);
-	fid = p9_fid_create(clnt);
+	fid = p9_fid_create(&nop_mnt_idmap, clnt);
 	if (!fid) {
 		err = -ENOMEM;
 		goto error;
@@ -2026,7 +2032,7 @@ struct p9_fid *p9_client_xattrwalk(struct p9_fid *file_fid,
 	struct p9_fid *attr_fid;
 
 	clnt = file_fid->clnt;
-	attr_fid = p9_fid_create(clnt);
+	attr_fid = p9_fid_create(&nop_mnt_idmap, clnt);
 	if (!attr_fid) {
 		err = -ENOMEM;
 		goto error;

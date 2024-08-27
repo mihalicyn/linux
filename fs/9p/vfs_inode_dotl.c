@@ -41,7 +41,7 @@ v9fs_vfs_mknod_dotl(struct mnt_idmap *idmap, struct inode *dir,
  * group of the new file system object.
  */
 
-static kgid_t v9fs_get_fsgid_for_create(struct inode *dir_inode)
+static kgid_t v9fs_get_fsgid_for_create(struct mnt_idmap *idmap, struct inode *dir_inode)
 {
 	BUG_ON(dir_inode == NULL);
 
@@ -49,13 +49,13 @@ static kgid_t v9fs_get_fsgid_for_create(struct inode *dir_inode)
 		/* set_gid bit is set.*/
 		return dir_inode->i_gid;
 	}
-	return current_fsgid();
+	return mapped_fsgid(idmap, i_user_ns(dir_inode));
 }
 
 
 
 struct inode *
-v9fs_fid_iget_dotl(struct super_block *sb, struct p9_fid *fid, bool new)
+v9fs_fid_iget_dotl(struct mnt_idmap *idmap, struct super_block *sb, struct p9_fid *fid, bool new)
 {
 	int retval;
 	struct inode *inode;
@@ -89,7 +89,7 @@ v9fs_fid_iget_dotl(struct super_block *sb, struct p9_fid *fid, bool new)
 		goto error;
 	}
 
-	retval = v9fs_init_inode(v9ses, inode, &fid->qid,
+	retval = v9fs_init_inode(idmap, v9ses, inode, &fid->qid,
 				 st->st_mode, new_decode_dev(st->st_rdev));
 	v9fs_stat2inode_dotl(st, inode, 0);
 	kfree(st);
@@ -181,6 +181,7 @@ static int
 v9fs_vfs_atomic_open_dotl(struct inode *dir, struct dentry *dentry,
 			  struct file *file, unsigned int flags, umode_t omode)
 {
+	struct mnt_idmap *idmap = file_mnt_idmap(file);
 	int err = 0;
 	kgid_t gid;
 	umode_t mode;
@@ -224,11 +225,11 @@ v9fs_vfs_atomic_open_dotl(struct inode *dir, struct dentry *dentry,
 	ofid = clone_fid(dfid);
 	if (IS_ERR(ofid)) {
 		err = PTR_ERR(ofid);
-		p9_debug(P9_DEBUG_VFS, "p9_client_walk failed %d\n", err);
+		p9_debug(P9_DEBUG_VFS, "clone_fid failed %d\n", err);
 		goto out;
 	}
 
-	gid = v9fs_get_fsgid_for_create(dir);
+	gid = v9fs_get_fsgid_for_create(idmap, dir);
 
 	mode = omode;
 	/* Update mode based on ACL value */
@@ -259,7 +260,7 @@ v9fs_vfs_atomic_open_dotl(struct inode *dir, struct dentry *dentry,
 		p9_debug(P9_DEBUG_VFS, "p9_client_walk failed %d\n", err);
 		goto out;
 	}
-	inode = v9fs_fid_iget_dotl(dir->i_sb, fid, true);
+	inode = v9fs_fid_iget_dotl(idmap, dir->i_sb, fid, true);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n", err);
@@ -330,7 +331,7 @@ static int v9fs_vfs_mkdir_dotl(struct mnt_idmap *idmap,
 		goto error;
 	}
 
-	gid = v9fs_get_fsgid_for_create(dir);
+	gid = v9fs_get_fsgid_for_create(idmap, dir);
 	mode = omode;
 	/* Update mode based on ACL value */
 	err = v9fs_acl_mode(dir, &mode, &dacl, &pacl);
@@ -352,7 +353,7 @@ static int v9fs_vfs_mkdir_dotl(struct mnt_idmap *idmap,
 	}
 
 	/* instantiate inode and assign the unopened fid to the dentry */
-	inode = v9fs_fid_iget_dotl(dir->i_sb, fid, true);
+	inode = v9fs_fid_iget_dotl(idmap, dir->i_sb, fid, true);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n",
@@ -657,7 +658,7 @@ v9fs_vfs_symlink_dotl(struct mnt_idmap *idmap, struct inode *dir,
 		return err;
 	}
 
-	gid = v9fs_get_fsgid_for_create(dir);
+	gid = v9fs_get_fsgid_for_create(idmap, dir);
 
 	/* Server doesn't alter fid on TSYMLINK. Hence no need to clone it. */
 	err = p9_client_symlink(dfid, name, symname, gid, &qid);
@@ -765,7 +766,7 @@ v9fs_vfs_mknod_dotl(struct mnt_idmap *idmap, struct inode *dir,
 		goto error;
 	}
 
-	gid = v9fs_get_fsgid_for_create(dir);
+	gid = v9fs_get_fsgid_for_create(idmap, dir);
 	mode = omode;
 	/* Update mode based on ACL value */
 	err = v9fs_acl_mode(dir, &mode, &dacl, &pacl);
@@ -788,7 +789,7 @@ v9fs_vfs_mknod_dotl(struct mnt_idmap *idmap, struct inode *dir,
 			 err);
 		goto error;
 	}
-	inode = v9fs_fid_iget_dotl(dir->i_sb, fid, true);
+	inode = v9fs_fid_iget_dotl(idmap, dir->i_sb, fid, true);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n",

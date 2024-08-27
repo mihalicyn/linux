@@ -119,7 +119,7 @@ static struct dentry *v9fs_mount(struct file_system_type *fs_type, int flags,
 	if (!v9ses)
 		return ERR_PTR(-ENOMEM);
 
-	fid = v9fs_session_init(v9ses, dev_name, data);
+	fid = v9fs_session_init(v9ses, dev_name, data);//
 	if (IS_ERR(fid)) {
 		retval = PTR_ERR(fid);
 		goto free_session;

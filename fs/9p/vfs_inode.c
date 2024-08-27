@@ -255,7 +255,7 @@ void v9fs_set_netfs_context(struct inode *inode)
 	netfs_inode_init(&v9inode->netfs, &v9fs_req_ops, true);
 }
 
-int v9fs_init_inode(struct v9fs_session_info *v9ses,
+int v9fs_init_inode(struct mnt_idmap *idmap, struct v9fs_session_info *v9ses,
 		    struct inode *inode, struct p9_qid *qid, umode_t mode, dev_t rdev)
 {
 	int err = 0;
@@ -263,7 +263,7 @@ int v9fs_init_inode(struct v9fs_session_info *v9ses,
 
 	memcpy(&v9inode->qid, qid, sizeof(struct p9_qid));
 
-	inode_init_owner(&nop_mnt_idmap, inode, NULL, mode);
+	inode_init_owner(idmap, inode, NULL, mode);//!
 	inode->i_blocks = 0;
 	inode->i_rdev = rdev;
 	simple_inode_init_ts(inode);
@@ -532,7 +532,7 @@ static int v9fs_remove(struct inode *dir, struct dentry *dentry, int flags)
  *
  */
 static struct p9_fid *
-v9fs_create(struct v9fs_session_info *v9ses, struct inode *dir,
+v9fs_create(struct mnt_idmap *idmap, struct v9fs_session_info *v9ses, struct inode *dir,
 		struct dentry *dentry, char *extension, u32 perm, u8 mode)
 {
 	int err;
@@ -576,7 +576,7 @@ v9fs_create(struct v9fs_session_info *v9ses, struct inode *dir,
 		/*
 		 * instantiate inode and assign the unopened fid to the dentry
 		 */
-		inode = v9fs_get_inode_from_fid(v9ses, fid, dir->i_sb, true);
+		inode = v9fs_get_inode_from_fid(idmap, v9ses, fid, dir->i_sb, true);
 		if (IS_ERR(inode)) {
 			err = PTR_ERR(inode);
 			p9_debug(P9_DEBUG_VFS,
@@ -617,7 +617,7 @@ v9fs_vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	struct p9_fid *fid;
 
 	/* P9_OEXCL? */
-	fid = v9fs_create(v9ses, dir, dentry, NULL, perm, P9_ORDWR);
+	fid = v9fs_create(idmap, v9ses, dir, dentry, NULL, perm, P9_ORDWR);
 	if (IS_ERR(fid))
 		return PTR_ERR(fid);
 
@@ -648,7 +648,7 @@ static int v9fs_vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	err = 0;
 	v9ses = v9fs_inode2v9ses(dir);
 	perm = unixmode2p9mode(v9ses, mode | S_IFDIR);
-	fid = v9fs_create(v9ses, dir, dentry, NULL, perm, P9_OREAD);
+	fid = v9fs_create(idmap, v9ses, dir, dentry, NULL, perm, P9_OREAD);
 	if (IS_ERR(fid)) {
 		err = PTR_ERR(fid);
 		fid = NULL;
@@ -729,6 +729,7 @@ static int
 v9fs_vfs_atomic_open(struct inode *dir, struct dentry *dentry,
 		     struct file *file, unsigned int flags, umode_t mode)
 {
+	struct mnt_idmap *idmap = file_mnt_idmap(file);
 	int err;
 	u32 perm;
 	struct v9fs_inode __maybe_unused *v9inode;
@@ -760,7 +761,7 @@ v9fs_vfs_atomic_open(struct inode *dir, struct dentry *dentry,
 		p9_debug(P9_DEBUG_CACHE,
 			"write-only file with writeback enabled, creating w/ O_RDWR\n");
 	}
-	fid = v9fs_create(v9ses, dir, dentry, NULL, perm, p9_omode);
+	fid = v9fs_create(idmap, v9ses, dir, dentry, NULL, perm, p9_omode);
 	if (IS_ERR(fid)) {
 		err = PTR_ERR(fid);
 		goto error;
@@ -1184,7 +1185,7 @@ static const char *v9fs_vfs_get_link(struct dentry *dentry,
  *
  */
 
-static int v9fs_vfs_mkspecial(struct inode *dir, struct dentry *dentry,
+static int v9fs_vfs_mkspecial(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry,
 	u32 perm, const char *extension)
 {
 	struct p9_fid *fid;
@@ -1196,7 +1197,7 @@ static int v9fs_vfs_mkspecial(struct inode *dir, struct dentry *dentry,
 		return -EPERM;
 	}
 
-	fid = v9fs_create(v9ses, dir, dentry, (char *) extension, perm,
+	fid = v9fs_create(idmap, v9ses, dir, dentry, (char *) extension, perm,
 								P9_OREAD);
 	if (IS_ERR(fid))
 		return PTR_ERR(fid);
@@ -1224,7 +1225,7 @@ v9fs_vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	p9_debug(P9_DEBUG_VFS, " %lu,%pd,%s\n",
 		 dir->i_ino, dentry, symname);
 
-	return v9fs_vfs_mkspecial(dir, dentry, P9_DMSYMLINK, symname);
+	return v9fs_vfs_mkspecial(idmap, dir, dentry, P9_DMSYMLINK, symname);
 }
 
 #define U32_MAX_DIGITS 10
@@ -1253,7 +1254,7 @@ v9fs_vfs_link(struct dentry *old_dentry, struct inode *dir,
 		return PTR_ERR(oldfid);
 
 	sprintf(name, "%d\n", oldfid->fid);
-	retval = v9fs_vfs_mkspecial(dir, dentry, P9_DMLINK, name);
+	retval = v9fs_vfs_mkspecial(&nop_mnt_idmap, dir, dentry, P9_DMLINK, name);
 	if (!retval) {
 		v9fs_refresh_inode(oldfid, d_inode(old_dentry));
 		v9fs_invalidate_inode_attr(dir);
@@ -1294,7 +1295,7 @@ v9fs_vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 		*name = 0;
 
 	perm = unixmode2p9mode(v9ses, mode);
-	retval = v9fs_vfs_mkspecial(dir, dentry, perm, name);
+	retval = v9fs_vfs_mkspecial(idmap, dir, dentry, perm, name);
 
 	return retval;
 }
