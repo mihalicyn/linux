@@ -205,6 +205,21 @@ int cg_open(const char *cgroup, const char *control, int flags)
 	return open(path, flags);
 }
 
+/*
+ * Returns cgroup id on success, or -1 on failure.
+ */
+uint64_t cg_get_id(const char *cgroup)
+{
+	struct stat st;
+	int ret;
+
+	ret = stat(cgroup, &st);
+	if (ret)
+		return -1;
+
+	return st.st_ino;
+}
+
 int cg_write_numeric(const char *cgroup, const char *control, long value)
 {
 	char buf[64];
