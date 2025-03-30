@@ -1,0 +1,86 @@
+# based on https://github.com/zabbly/linux/blob/x86_64/.github/workflows/builds.yml
+name: Builds
+on:
+  - push
+
+permissions:
+  contents: read
+
+jobs:
+  build-kernel:
+    name: Build kernel
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            bc \
+            binutils \
+            bison \
+            cpio \
+            debhelper \
+            dpkg-dev \
+            flex \
+            git \
+            kmod \
+            libelf-dev \
+            libssl-dev \
+            rsync \
+            zstd
+
+          sudo apt-get install --yes pahole || true
+
+      - name: Configure git
+        run: |
+          git config user.email "noreply@kernoops.org"
+          git config user.name "Custom kernel build"
+
+      - name: Generate version string
+        env:
+          PKGARCH: "amd64"
+          PKGOS: "ubuntu-24.04"
+        run: |
+          VERSION="$(make kernelversion)-${PKGARCH}-$(date -u +%Y%m%d%H%M)-$(echo ${PKGOS} | sed "s/-//g")"
+          echo "${VERSION}"
+          echo "${VERSION}" > ../.version
+
+      - name: Prepare for the build
+        run: |
+          mv .config .config.new
+          git commit -m "TEMP: Remove config from index" .config
+          mv .config.new .config
+
+      - name: Build the kernel
+        env:
+          DEBEMAIL: "noreply@kernoops.org"
+          DEBFULLNAME: "Custom Kernel Builds"
+          KDEB_CHANGELOG_DIST: "ubuntu-24.04"
+          KDEB_COMPRESS: "zstd"
+          PKGOS: "ubuntu-24.04"
+        run: |
+          export KDEB_PKGVERSION="$(cat ../.version)"
+          export KDEB_SOURCENAME="linux-kernoops-${KDEB_PKGVERSION}"
+
+          make oldconfig
+          make deb-pkg -j$(nproc) || make deb-pkg -j$(nproc)
+
+      - name: Prepare the artifacts
+        run: |
+          mkdir out/
+          mv ../linux-* out/
+
+      - name: Upload resulting build
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: linux-kernel-build
+          path: out/*
+          if-no-files-found: error
+          retention-days: 90
