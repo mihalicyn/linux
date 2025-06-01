@@ -147,8 +147,14 @@ EXPORT_SYMBOL(__scm_destroy);
 
 static inline int __scm_replace_pid(struct scm_cookie *scm, struct pid *pid)
 {
+	int err;
+
 	/* drop all previous references */
 	scm_destroy_cred(scm);
+
+	err = pidfs_register_pid(pid);
+	if (err)
+		return err;
 
 	scm->pid = pid;
 	scm->creds.pid = pid_vnr(pid);
