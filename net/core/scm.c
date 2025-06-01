@@ -189,15 +189,20 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			if (err)
 				goto error;
 
-			p->creds.pid = creds.pid;
 			if (!p->pid || pid_vnr(p->pid) != creds.pid) {
 				struct pid *pid;
 				err = -ESRCH;
 				pid = find_get_pid(creds.pid);
 				if (!pid)
 					goto error;
-				put_pid(p->pid);
-				p->pid = pid;
+
+				err = __scm_replace_pid(p, pid);
+				/* Release what we get from find_get_pid() as
+				 * __scm_replace_pid() takes all necessary refcounts.
+				 */
+				put_pid(pid);
+				if (err)
+					goto error;
 			}
 
 			err = -EINVAL;
