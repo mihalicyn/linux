@@ -8,6 +8,7 @@
 #include <linux/file.h>
 #include <linux/security.h>
 #include <linux/pid.h>
+#include <linux/pidfs.h>
 #include <linux/nsproxy.h>
 #include <linux/sched/signal.h>
 #include <net/compat.h>
@@ -66,19 +67,39 @@ static __inline__ void unix_get_peersec_dgram(struct socket *sock, struct scm_co
 { }
 #endif /* CONFIG_SECURITY_NETWORK */
 
-static __inline__ void scm_set_cred(struct scm_cookie *scm,
-				    struct pid *pid, kuid_t uid, kgid_t gid)
+static __inline__ int __scm_set_cred(struct scm_cookie *scm,
+				     struct pid *pid, bool pidfs_register,
+				     kuid_t uid, kgid_t gid)
 {
-	scm->pid  = get_pid(pid);
+	if (pidfs_register) {
+		int err;
+
+		err = pidfs_register_pid(pid);
+		if (err)
+			return err;
+	} else {
+		pidfs_get_pid(pid);
+	}
+	scm->pid = get_pid(pid);
+
 	scm->creds.pid = pid_vnr(pid);
 	scm->creds.uid = uid;
 	scm->creds.gid = gid;
+	return 0;
+}
+
+static __inline__ void scm_set_cred(struct scm_cookie *scm,
+				    struct pid *pid, kuid_t uid, kgid_t gid)
+{
+	/* __scm_set_cred() can't fail when pidfs_register == false */
+	(void) __scm_set_cred(scm, pid, false, uid, gid);
 }
 
 static __inline__ void scm_destroy_cred(struct scm_cookie *scm)
 {
+	pidfs_put_pid(scm->pid);
 	put_pid(scm->pid);
-	scm->pid  = NULL;
+	scm->pid = NULL;
 }
 
 static __inline__ void scm_destroy(struct scm_cookie *scm)
@@ -90,8 +111,14 @@ static __inline__ void scm_destroy(struct scm_cookie *scm)
 
 static __inline__ int __scm_replace_pid(struct scm_cookie *scm, struct pid *pid)
 {
+	int err;
+
 	/* drop all previous references */
 	scm_destroy_cred(scm);
+
+	err = pidfs_register_pid(pid);
+	if (err)
+		return err;
 
 	scm->pid = get_pid(pid);
 	scm->creds.pid = pid_vnr(pid);
@@ -105,7 +132,7 @@ static __inline__ int scm_send(struct socket *sock, struct msghdr *msg,
 	scm->creds.uid = INVALID_UID;
 	scm->creds.gid = INVALID_GID;
 	if (forcecreds)
-		scm_set_cred(scm, task_tgid(current), current_uid(), current_gid());
+		__scm_set_cred(scm, task_tgid(current), true, current_uid(), current_gid());
 	unix_get_peersec_dgram(sock, scm);
 	if (msg->msg_controllen <= 0)
 		return 0;
