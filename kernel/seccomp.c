@@ -931,16 +931,24 @@ static long seccomp_attach_filter(unsigned int flags,
 				  struct seccomp_filter *filter)
 {
 	unsigned long total_insns;
+	unsigned char total_listeners;
 	struct seccomp_filter *walker;
 
 	assert_spin_locked(&current->sighand->siglock);
 
-	/* Validate resulting filter length. */
+	/* Validate resulting filter length and number of nested listeners. */
 	total_insns = filter->prog->len;
-	for (walker = current->seccomp.filter; walker; walker = walker->prev)
+	total_listeners = filter->notif ? 1 : 0;
+	for (walker = current->seccomp.filter; walker; walker = walker->prev) {
 		total_insns += walker->prog->len + 4;  /* 4 instr penalty */
+		total_listeners += walker->notif ? 1 : 0;
+	}
+
 	if (total_insns > MAX_INSNS_PER_PATH)
 		return -ENOMEM;
+
+	if (total_listeners > MAX_LISTENERS_PER_PATH)
+		return -ELOOP;
 
 	/* If thread sync has been requested, check that it is possible. */
 	if (flags & SECCOMP_FILTER_FLAG_TSYNC) {
