@@ -237,6 +237,9 @@ struct seccomp_filter {
 /* Limit any path through the tree to 256KB worth of instructions. */
 #define MAX_INSNS_PER_PATH ((1 << 18) / sizeof(struct sock_filter))
 
+/* Limit number of listeners through the tree. */
+#define MAX_LISTENERS_PER_PATH 8
+
 /*
  * Endianness is explicitly ignored and left for BPF program authors to manage
  * as per the specific architecture.
@@ -391,18 +394,38 @@ static inline bool seccomp_cache_check_allow(const struct seccomp_filter *sfilte
 }
 #endif /* SECCOMP_ARCH_NATIVE */
 
+/**
+ * struct seccomp_filter_matches - container for seccomp filter match results
+ *
+ * @n: A number of filters matched.
+ * @filters: An array of (struct seccomp_filter) pointers.
+ *	     Holds pointers to filters that matched during evaluation.
+ *	     A first one in the array is the one with the least permissive
+ *	     action result.
+ *
+ * If final action result is less (or more) permissive than SECCOMP_RET_USER_NOTIF,
+ * only the most restrictive filter is stored in the array's first element.
+ * If final action result is SECCOMP_RET_USER_NOTIF, we need to track
+ * all filters that resulted in the same action to support multiple listeners
+ * in seccomp tree.
+ */
+struct seccomp_filter_matches {
+	unsigned char n;
+	struct seccomp_filter *filters[MAX_LISTENERS_PER_PATH];
+};
+
 #define ACTION_ONLY(ret) ((s32)((ret) & (SECCOMP_RET_ACTION_FULL)))
 /**
  * seccomp_run_filters - evaluates all seccomp filters against @sd
  * @sd: optional seccomp data to be passed to filters
- * @match: stores struct seccomp_filter that resulted in the return value,
+ * @matches: array of struct seccomp_filter pointers that resulted in the return value,
  *         unless filter returned SECCOMP_RET_ALLOW, in which case it will
  *         be unchanged.
  *
  * Returns valid seccomp BPF response codes.
  */
 static u32 seccomp_run_filters(const struct seccomp_data *sd,
-			       struct seccomp_filter **match)
+			       struct seccomp_filter_matches *matches)
 {
 	u32 ret = SECCOMP_RET_ALLOW;
 	/* Make sure cross-thread synced filter points somewhere sane. */
@@ -425,7 +448,8 @@ static u32 seccomp_run_filters(const struct seccomp_data *sd,
 
 		if (ACTION_ONLY(cur_ret) < ACTION_ONLY(ret)) {
 			ret = cur_ret;
-			*match = f;
+			matches->n = 1;
+			matches->filters[0] = f;
 		}
 	}
 	return ret;
@@ -1252,6 +1276,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 {
 	u32 filter_ret, action;
 	struct seccomp_data sd;
+	struct seccomp_filter_matches matches = {};
 	struct seccomp_filter *match = NULL;
 	int data;
 
@@ -1263,7 +1288,9 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 
 	populate_seccomp_data(&sd);
 
-	filter_ret = seccomp_run_filters(&sd, &match);
+	filter_ret = seccomp_run_filters(&sd, &matches);
+
+	match = matches.filters[0];
 	data = filter_ret & SECCOMP_RET_DATA;
 	action = filter_ret & SECCOMP_RET_ACTION_FULL;
 
