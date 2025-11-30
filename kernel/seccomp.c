@@ -450,6 +450,9 @@ static u32 seccomp_run_filters(const struct seccomp_data *sd,
 			ret = cur_ret;
 			matches->n = 1;
 			matches->filters[0] = f;
+		} else if ((ACTION_ONLY(cur_ret) == ACTION_ONLY(ret)) &&
+			    ACTION_ONLY(cur_ret) == SECCOMP_RET_USER_NOTIF) {
+			matches->filters[matches->n++] = f;
 		}
 	}
 	return ret;
@@ -1362,8 +1365,17 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(match, &sd))
-			goto skip;
+		for (unsigned char i = 0; i < matches.n; i++) {
+			match = matches.filters[i];
+			/*
+			 * If userspace wants us to skip this syscall, do so.
+			 * But if userspace wants to continue syscall, we
+			 * must consult with the upper-level filters listeners
+			 * and act accordingly.
+			 */
+			if (seccomp_do_user_notification(match, &sd))
+				goto skip;
+		}
 
 		return 0;
 
