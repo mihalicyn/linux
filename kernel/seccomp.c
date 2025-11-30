@@ -448,8 +448,21 @@ static u32 seccomp_run_filters(const struct seccomp_data *sd,
 
 		if (ACTION_ONLY(cur_ret) < ACTION_ONLY(ret)) {
 			ret = cur_ret;
+			/*
+			 * No matter what we had before in matches->filters[],
+			 * we need to overwrite it, because current action is more
+			 * restrictive than any previous one.
+			 */
 			matches->n = 1;
 			matches->filters[0] = f;
+		} else if ((ACTION_ONLY(cur_ret) == ACTION_ONLY(ret)) &&
+			    ACTION_ONLY(cur_ret) == SECCOMP_RET_USER_NOTIF) {
+			/*
+			 * For multiple SECCOMP_RET_USER_NOTIF results, we need to
+			 * track all filters that resulted in the same action, because
+			 * we might need to notify a few of them to get a final decision.
+			 */
+			matches->filters[matches->n++] = f;
 		}
 	}
 	return ret;
@@ -1362,8 +1375,24 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(match, &sd))
-			goto skip;
+		for (unsigned char i = 0; i < matches.n; i++) {
+			match = matches.filters[i];
+			/*
+			 * If userspace wants us to skip this syscall, do so.
+			 * But if userspace wants to continue syscall, we
+			 * must consult with the upper-level filters listeners
+			 * and act accordingly.
+			 *
+			 * Note, that if there are multiple filters returned
+			 * SECCOMP_RET_USER_NOTIF, and final result is
+			 * SECCOMP_RET_USER_NOTIF too, then seccomp_run_filters()
+			 * has populated matches.filters[] array with all of them
+			 * in order from the lowest-level (closest to a
+			 * current->seccomp.filter) to the highest-level.
+			 */
+			if (seccomp_do_user_notification(match, &sd))
+				goto skip;
+		}
 
 		return 0;
 
