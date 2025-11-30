@@ -1160,8 +1160,18 @@ static bool should_sleep_killable(struct seccomp_filter *match,
 	return match->wait_killable_recv && n->state >= SECCOMP_NOTIFY_SENT;
 }
 
-static int seccomp_do_user_notification(int this_syscall,
-					struct seccomp_filter *match,
+/**
+ * seccomp_do_user_notification - sends seccomp notification to the userspace
+ * listener and waits for a reply.
+ * @match: seccomp filter we are notifying
+ * @sd: seccomp data (syscall_nr, args, etc) to be passed to the userspace listener
+ *
+ * Returns
+ *   - -1 on success if userspace provided a reply for the syscall,
+ *   - -1 on interrupted wait,
+ *   - 0  on success if userspace requested to continue the syscall
+ */
+static int seccomp_do_user_notification(struct seccomp_filter *match,
 					const struct seccomp_data *sd)
 {
 	int err;
@@ -1335,7 +1345,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(this_syscall, match, &sd))
+		if (seccomp_do_user_notification(match, &sd))
 			goto skip;
 
 		return 0;
