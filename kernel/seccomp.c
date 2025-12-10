@@ -224,8 +224,8 @@ static inline void seccomp_cache_prepare(struct seccomp_filter *sfilter)
 struct seccomp_filter {
 	refcount_t refs;
 	refcount_t users;
-	bool log;
-	bool wait_killable_recv;
+	bool log : 1;
+	bool wait_killable_recv : 1;
 	struct action_cache cache;
 	struct seccomp_filter *prev;
 	struct bpf_prog *prog;
