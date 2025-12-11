@@ -205,6 +205,7 @@ static inline void seccomp_cache_prepare(struct seccomp_filter *sfilter)
  * @log: true if all actions except for SECCOMP_RET_ALLOW should be logged
  * @wait_killable_recv: Put notifying process in killable state once the
  *			notification is received by the userspace listener.
+ * @first_listener: true if this is the first seccomp listener installed in the tree.
  * @prev: points to a previously installed, or inherited, filter
  * @prog: the BPF program to evaluate
  * @notif: the struct that holds all notification related information
@@ -226,6 +227,7 @@ struct seccomp_filter {
 	refcount_t users;
 	bool log : 1;
 	bool wait_killable_recv : 1;
+	bool first_listener : 1;
 	struct action_cache cache;
 	struct seccomp_filter *prev;
 	struct bpf_prog *prog;
@@ -1939,7 +1941,7 @@ out:
  * Note that @new_child is not hooked up to its parent at this point yet, so
  * we use current->seccomp.filter.
  */
-static bool has_duplicate_listener(struct seccomp_filter *new_child)
+static bool check_duplicate_listener(struct seccomp_filter *new_child)
 {
 	struct seccomp_filter *cur;
 
@@ -1953,6 +1955,8 @@ static bool has_duplicate_listener(struct seccomp_filter *new_child)
 			return true;
 	}
 
+	/* Mark first listener in the tree. */
+	new_child->first_listener = true;
 	return false;
 }
 
@@ -2035,7 +2039,7 @@ static long seccomp_set_mode_filter(unsigned int flags,
 	if (!seccomp_may_assign_mode(seccomp_mode))
 		goto out;
 
-	if (has_duplicate_listener(prepared)) {
+	if (check_duplicate_listener(prepared)) {
 		ret = -EBUSY;
 		goto out;
 	}
