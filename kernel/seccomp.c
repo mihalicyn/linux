@@ -1268,6 +1268,69 @@ out:
 	return -1;
 }
 
+/**
+ * seccomp_do_user_notifications - sends seccomp notifications to the userspace
+ * taking into account multiple filters with listeners.
+ * @match: seccomp filter we are notifying first
+ * @sd: seccomp data (syscall_nr, args, etc) to be passed to the userspace listener
+ *
+ * Returns
+ *   - -1 on success if userspace provided a reply for the syscall,
+ *   - -1 on interrupted wait,
+ *   - 0  on success if userspace requested to continue the syscall
+ */
+static int seccomp_do_user_notifications(struct seccomp_filter *f,
+					 const struct seccomp_data *sd)
+{
+	if (seccomp_do_user_notification(f, sd))
+		goto syscall_skip;
+
+	/*
+	 * This check is needed to keep an old behavior where the first
+	 * (and only) listener decides what to do with the syscall.
+	 * Note, that even if some of the upper-level filters have
+	 * returned SECCOMP_RET_USER_NOTIF (but have no listener fd!),
+	 * we must ignore them in this case.
+	 * This is how it worked before nested listeners were introduced.
+	 */
+	if (f->first_listener)
+		goto syscall_continue;
+
+	/*
+	 * If userspace wants us to skip this syscall, do so.
+	 * But if userspace wants to continue syscall, we
+	 * must consult with the upper-level filters listeners
+	 * and act accordingly.
+	 */
+	for (f = f->prev; f; f = f->prev) {
+		u32 cur_ret;
+
+		/*
+		 * We only interested in listeners, no matter if notify fd
+		 * is closed or not.
+		 */
+		if (!f->notif)
+			continue;
+
+		cur_ret = bpf_prog_run_pin_on_cpu(f->prog, sd);
+		if (ACTION_ONLY(cur_ret) != SECCOMP_RET_USER_NOTIF)
+			continue;
+
+		if (seccomp_do_user_notification(f, sd))
+			goto syscall_skip;
+
+		if (f->first_listener)
+			break;
+	}
+
+syscall_continue:
+	/* continue syscall */
+	return 0;
+
+syscall_skip:
+	return -1;
+}
+
 static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 {
 	u32 filter_ret, action;
@@ -1347,7 +1410,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(match, &sd))
+		if (seccomp_do_user_notifications(match, &sd))
 			goto skip;
 
 		return 0;
