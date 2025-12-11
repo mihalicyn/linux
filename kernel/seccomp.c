@@ -1182,7 +1182,7 @@ static int seccomp_do_user_notification(struct seccomp_filter *match,
 
 	mutex_lock(&match->notify_lock);
 	err = -ENOSYS;
-	if (!match->notif)
+	if (IS_ERR_OR_NULL(match->notif))
 		goto out;
 
 	n.task = current;
@@ -1252,7 +1252,7 @@ interrupted:
 	 * *reattach* to a notifier right now. If one is added, we'll need to
 	 * keep track of the notif itself and make sure they match here.
 	 */
-	if (match->notif)
+	if (!IS_ERR_OR_NULL(match->notif))
 		list_del(&n.list);
 out:
 	mutex_unlock(&match->notify_lock);
@@ -1460,8 +1460,14 @@ out:
 #ifdef CONFIG_SECCOMP_FILTER
 static void seccomp_notify_free(struct seccomp_filter *filter)
 {
-	kfree(filter->notif);
-	filter->notif = NULL;
+	if (!IS_ERR_OR_NULL(filter->notif))
+		kfree(filter->notif);
+
+	/*
+	 * We want to know if a filter never had a notify fd,
+	 * or it is just been closed at some point.
+	 */
+	filter->notif = ERR_PTR(-ENOTCONN);
 }
 
 static void seccomp_notify_detach(struct seccomp_filter *filter)
@@ -1943,7 +1949,7 @@ static bool has_duplicate_listener(struct seccomp_filter *new_child)
 	if (!new_child->notif)
 		return false;
 	for (cur = current->seccomp.filter; cur; cur = cur->prev) {
-		if (cur->notif)
+		if (!IS_ERR_OR_NULL(cur->notif))
 			return true;
 	}
 
